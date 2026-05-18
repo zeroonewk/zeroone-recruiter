@@ -2,6 +2,81 @@ import { NextRequest, NextResponse } from 'next/server';
 import { sql } from '@/lib/db';
 import { requireSession } from '@/lib/auth';
 
+// ── GET ───────────────────────────────────────────────────────────────────────
+
+export type ProjectListItem = {
+  id: string;
+  title: string;
+  points: number;
+  opened_at: string;
+  closed_at: string | null;
+  is_archived: boolean;
+  created_at: string;
+  updated_at: string;
+  client_id: string;
+  client_name: string;
+  type_id: string;
+  type_name: string;
+  owner_id: string;
+  owner_name: string;
+  owner_email: string;
+  status_id: string;
+  status_name: string;
+  status_color: string;
+  status_is_success: boolean;
+  current_stage_name: string | null;
+  current_stage_deadline: string | null;
+  current_stage_position: number | null;
+  is_overdue: boolean;
+};
+
+export async function GET(request: NextRequest) {
+  try {
+    await requireSession();
+    const archived = request.nextUrl.searchParams.get('archived') === 'true';
+
+    const rows = (await sql`
+      SELECT
+        p.id, p.title, p.points, p.opened_at, p.closed_at, p.is_archived,
+        p.created_at, p.updated_at,
+        c.id AS client_id, c.name AS client_name,
+        pt.id AS type_id, pt.name AS type_name,
+        u.id AS owner_id, u.name AS owner_name, u.email AS owner_email,
+        rs.id AS status_id, rs.name AS status_name, rs.color AS status_color,
+        rs.is_success AS status_is_success,
+        cur_stage.name AS current_stage_name,
+        cur_stage.deadline AS current_stage_deadline,
+        cur_stage.position AS current_stage_position,
+        CASE
+          WHEN cur_stage.id IS NULL THEN false
+          WHEN cur_stage.deadline < CURRENT_DATE THEN true
+          ELSE false
+        END AS is_overdue
+      FROM projects p
+      JOIN clients c ON c.id = p.client_id
+      JOIN project_types pt ON pt.id = p.project_type_id
+      JOIN users u ON u.id = p.owner_id
+      JOIN result_statuses rs ON rs.id = p.status_id
+      LEFT JOIN LATERAL (
+        SELECT ps.id, ps.name, ps.position, ps.deadline
+        FROM project_stages ps
+        WHERE ps.project_id = p.id AND ps.done_at IS NULL
+        ORDER BY ps.position ASC
+        LIMIT 1
+      ) cur_stage ON true
+      WHERE (${archived} = TRUE OR p.is_archived = FALSE)
+      ORDER BY rs.is_success ASC, p.is_archived ASC, p.opened_at DESC
+    `) as ProjectListItem[];
+
+    return NextResponse.json({ ok: true, items: rows });
+  } catch (e) {
+    if (e instanceof Error && e.message === 'UNAUTHORIZED') {
+      return NextResponse.json({ ok: false, error: 'Brak dostepu' }, { status: 401 });
+    }
+    return NextResponse.json({ ok: false, error: 'Blad serwera' }, { status: 500 });
+  }
+}
+
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const URL_RE = /^https?:\/\//;
