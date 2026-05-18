@@ -1,8 +1,18 @@
-export default function TypyProjektowPage() {
-  return (
-    <>
-      <h1 className="text-2xl font-bold mb-2">Typy projektow</h1>
-      <p className="text-gray-600">Wkrotce...</p>
-    </>
-  );
+import { redirect } from 'next/navigation';
+import { getSession } from '@/lib/auth';
+import { sql } from '@/lib/db';
+import TypyProjektowClient, { type ProjectType } from '@/components/settings/TypyProjektowClient';
+
+export default async function TypyProjektowPage() {
+  const session = await getSession();
+  if (!session) redirect('/zaloguj');
+
+  const items = (await sql`
+    SELECT id, name, default_points, is_archived, created_at, updated_at
+    FROM project_types
+    WHERE NOT is_archived
+    ORDER BY name ASC
+  `) as ProjectType[];
+
+  return <TypyProjektowClient initialItems={items} />;
 }
