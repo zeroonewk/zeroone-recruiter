@@ -187,6 +187,17 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
       values.push(JSON.stringify(links));
     }
 
+    if ('status_id' in body) {
+      if (typeof body.status_id !== 'string' || !UUID_RE.test(body.status_id)) {
+        return NextResponse.json(
+          { ok: false, error: 'Nieprawidlowe status_id' },
+          { status: 400 }
+        );
+      }
+      setClauses.push(`status_id = $${i++}::uuid`);
+      values.push(body.status_id);
+    }
+
     if ('is_archived' in body) {
       const is_archived = Boolean(body.is_archived);
       if (is_archived && session.role !== 'admin') {

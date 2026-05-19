@@ -57,6 +57,7 @@ export default function ProjektEdycjaClient({
   const [savingNotes, setSavingNotes] = useState(false);
   const [savingLinks, setSavingLinks] = useState(false);
   const [savingPoints, setSavingPoints] = useState(false);
+  const [savingStatus, setSavingStatus] = useState(false);
   const [savingStageId, setSavingStageId] = useState<string | null>(null);
   const [toast, setToast] = useState<Toast | null>(null);
 
@@ -225,6 +226,33 @@ export default function ProjektEdycjaClient({
     }
   }
 
+  // ── Status handler ────────────────────────────────────────────────────────
+
+  async function handleStatusChange(newStatusId: string) {
+    if (newStatusId === project.status_id) return;
+    const chosen = availableStatuses.find((s) => s.id === newStatusId);
+    if (!chosen || chosen.is_success) return;
+    setSavingStatus(true);
+    try {
+      const res = await fetch(`/api/projekty/${project.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status_id: newStatusId }),
+      });
+      const data = (await res.json()) as { ok: boolean; project?: ProjectFull; error?: string };
+      if (data.ok && data.project) {
+        setProject(data.project);
+        showToast('success', 'Status zaktualizowany');
+      } else {
+        showToast('error', data.error ?? 'Nie udalo sie zmienic statusu');
+      }
+    } catch {
+      showToast('error', 'Nie udalo sie zmienic statusu');
+    } finally {
+      setSavingStatus(false);
+    }
+  }
+
   // ── Archive handler ───────────────────────────────────────────────────────
 
   async function handleArchive(archive: boolean) {
@@ -371,14 +399,31 @@ export default function ProjektEdycjaClient({
                 <dt className="text-gray-500 shrink-0">Owner</dt>
                 <dd className="text-gray-900 text-right">{project.owner_name}</dd>
               </div>
-              <div className="py-2 flex justify-between gap-4">
-                <dt className="text-gray-500 shrink-0">Status</dt>
-                <dd className="flex items-center gap-1.5">
-                  <span
-                    className="inline-block w-2.5 h-2.5 rounded-full shrink-0"
-                    style={{ backgroundColor: project.status_color }}
-                  />
-                  <span className="text-gray-900">{project.status_name}</span>
+              <div className="py-2">
+                <dt className="text-gray-500 text-sm mb-2">Status</dt>
+                <dd>
+                  <div className="flex items-center gap-2">
+                    <span
+                      className="inline-block w-3 h-3 rounded-full shrink-0"
+                      style={{ backgroundColor: project.status_color }}
+                    />
+                    <select
+                      value={project.status_id}
+                      disabled={savingStatus}
+                      onChange={(e) => void handleStatusChange(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-[#FF5A3C] focus:border-transparent disabled:bg-gray-50 disabled:cursor-not-allowed"
+                    >
+                      {availableStatuses.map((s) => (
+                        <option key={s.id} value={s.id} disabled={s.is_success}>
+                          {s.name}
+                          {s.is_success ? ' (uzyj zamykania projektu)' : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Aby zamknac z sukcesem, uzyj funkcji zamykania projektu (wkrotce).
+                  </p>
                 </dd>
               </div>
               <div className="py-2 flex justify-between gap-4">
