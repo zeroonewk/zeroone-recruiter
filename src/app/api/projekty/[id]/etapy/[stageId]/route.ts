@@ -1,16 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { sql } from '@/lib/db';
 import { requireSession } from '@/lib/auth';
+import { toDateString } from '@/lib/dates';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
-type StageRow = {
+type StageRowRaw = {
   id: string;
   name: string;
   position: number;
-  deadline: string;
-  done_at: string | null;
+  deadline: unknown;
+  done_at: unknown;
   notes: string | null;
 };
 
@@ -84,13 +85,23 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
       WHERE id = $${i}::uuid AND project_id = $${i + 1}::uuid
       RETURNING id, name, position, deadline, done_at, notes
     `;
-    const rows = (await sql.query(queryStr, values)) as StageRow[];
+    const rows = (await sql.query(queryStr, values)) as StageRowRaw[];
 
     if (!rows || rows.length === 0) {
       return NextResponse.json({ ok: false, error: 'Etap nie istnieje' }, { status: 404 });
     }
 
-    return NextResponse.json({ ok: true, stage: rows[0] });
+    const raw = rows[0];
+    const stage = {
+      id: raw.id,
+      name: raw.name,
+      position: raw.position,
+      deadline: toDateString(raw.deadline) ?? '',
+      done_at: toDateString(raw.done_at),
+      notes: raw.notes,
+    };
+
+    return NextResponse.json({ ok: true, stage });
   } catch (e) {
     if (e instanceof Error && e.message === 'UNAUTHORIZED') {
       return NextResponse.json({ ok: false, error: 'Brak dostepu' }, { status: 401 });
