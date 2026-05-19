@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import { getSession } from '@/lib/auth';
 import { sql } from '@/lib/db';
+import { toDateString } from '@/lib/dates';
 import AppShell from '@/components/layout/AppShell';
 import ProjektyClient from '@/components/projects/ProjektyClient';
 import type { ProjectListItem } from '@/app/api/projekty/route';
@@ -53,7 +54,31 @@ export default async function ProjektyPage() {
   return (
     <AppShell user={{ name: session.name, email: session.email, role: session.role }}>
       <ProjektyClient
-        initialItems={projectRows as ProjectListItem[]}
+        initialItems={(projectRows as Record<string, unknown>[]).map((r) => ({
+          id: r.id as string,
+          title: r.title as string,
+          points: r.points as number,
+          opened_at: toDateString(r.opened_at) ?? '',
+          closed_at: toDateString(r.closed_at),
+          is_archived: r.is_archived as boolean,
+          created_at: toDateString(r.created_at) ?? '',
+          updated_at: toDateString(r.updated_at) ?? '',
+          client_id: r.client_id as string,
+          client_name: r.client_name as string,
+          type_id: r.type_id as string,
+          type_name: r.type_name as string,
+          owner_id: r.owner_id as string,
+          owner_name: r.owner_name as string,
+          owner_email: r.owner_email as string,
+          status_id: r.status_id as string,
+          status_name: r.status_name as string,
+          status_color: r.status_color as string,
+          status_is_success: r.status_is_success as boolean,
+          current_stage_name: (r.current_stage_name as string | null) ?? null,
+          current_stage_deadline: toDateString(r.current_stage_deadline),
+          current_stage_position: (r.current_stage_position as number | null) ?? null,
+          is_overdue: r.is_overdue as boolean,
+        }))}
         statuses={statusRows as FilterOption[]}
         types={typeRows as FilterOption[]}
         clients={clientRows as FilterOption[]}

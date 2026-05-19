@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { sql } from '@/lib/db';
 import { requireSession } from '@/lib/auth';
+import { toDateString } from '@/lib/dates';
 
 // ── GET ───────────────────────────────────────────────────────────────────────
 
@@ -66,9 +67,35 @@ export async function GET(request: NextRequest) {
       ) cur_stage ON true
       WHERE (${archived} = TRUE OR p.is_archived = FALSE)
       ORDER BY rs.is_success ASC, p.is_archived ASC, p.opened_at DESC
-    `) as ProjectListItem[];
+    `) as Record<string, unknown>[];
 
-    return NextResponse.json({ ok: true, items: rows });
+    const items: ProjectListItem[] = rows.map((r) => ({
+      id: r.id as string,
+      title: r.title as string,
+      points: r.points as number,
+      opened_at: toDateString(r.opened_at) ?? '',
+      closed_at: toDateString(r.closed_at),
+      is_archived: r.is_archived as boolean,
+      created_at: toDateString(r.created_at) ?? '',
+      updated_at: toDateString(r.updated_at) ?? '',
+      client_id: r.client_id as string,
+      client_name: r.client_name as string,
+      type_id: r.type_id as string,
+      type_name: r.type_name as string,
+      owner_id: r.owner_id as string,
+      owner_name: r.owner_name as string,
+      owner_email: r.owner_email as string,
+      status_id: r.status_id as string,
+      status_name: r.status_name as string,
+      status_color: r.status_color as string,
+      status_is_success: r.status_is_success as boolean,
+      current_stage_name: (r.current_stage_name as string | null) ?? null,
+      current_stage_deadline: toDateString(r.current_stage_deadline),
+      current_stage_position: (r.current_stage_position as number | null) ?? null,
+      is_overdue: r.is_overdue as boolean,
+    }));
+
+    return NextResponse.json({ ok: true, items });
   } catch (e) {
     if (e instanceof Error && e.message === 'UNAUTHORIZED') {
       return NextResponse.json({ ok: false, error: 'Brak dostepu' }, { status: 401 });
