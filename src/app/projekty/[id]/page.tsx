@@ -8,6 +8,14 @@ import type { ProjectFull, ProjectStage } from '@/app/api/projekty/[id]/route';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+type AvailableStatus = {
+  id: string;
+  name: string;
+  color: string;
+  is_success: boolean;
+  position: number;
+};
+
 type ProjectRowRaw = {
   id: string;
   title: string;
@@ -50,7 +58,7 @@ export default async function ProjektDetailPage({
   const { id } = await params;
   if (!UUID_RE.test(id)) notFound();
 
-  const [projectRows, stageRows] = await Promise.all([
+  const [projectRows, stageRows, statusRows] = await Promise.all([
     sql`
       SELECT
         p.id, p.title, p.points, p.notes, p.links, p.opened_at, p.closed_at, p.is_archived,
@@ -71,6 +79,12 @@ export default async function ProjektDetailPage({
       SELECT id, name, position, deadline, done_at, notes
       FROM project_stages
       WHERE project_id = ${id}::uuid
+      ORDER BY position ASC
+    `,
+    sql`
+      SELECT id, name, color, is_success, position
+      FROM result_statuses
+      WHERE is_archived = FALSE
       ORDER BY position ASC
     `,
   ]);
@@ -116,6 +130,7 @@ export default async function ProjektDetailPage({
         initialStages={stages}
         currentUserRole={session.role}
         currentUserId={session.sub}
+        availableStatuses={statusRows as AvailableStatus[]}
       />
     </AppShell>
   );

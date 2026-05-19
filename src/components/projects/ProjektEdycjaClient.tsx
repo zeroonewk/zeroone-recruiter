@@ -5,11 +5,19 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import type { ProjectFull, ProjectStage } from '@/app/api/projekty/[id]/route';
 
+type AvailableStatus = {
+  id: string;
+  name: string;
+  color: string;
+  is_success: boolean;
+  position: number;
+};
 type Props = {
   initialProject: ProjectFull;
   initialStages: ProjectStage[];
   currentUserRole: 'admin' | 'recruiter';
   currentUserId: string;
+  availableStatuses: AvailableStatus[];
 };
 
 type Toast = { type: 'success' | 'error'; message: string };
@@ -37,6 +45,7 @@ export default function ProjektEdycjaClient({
   initialProject,
   initialStages,
   currentUserRole,
+  availableStatuses,
 }: Props) {
   const router = useRouter();
 
