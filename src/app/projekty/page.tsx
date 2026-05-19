@@ -4,7 +4,6 @@ import { sql } from '@/lib/db';
 import { toDateString } from '@/lib/dates';
 import AppShell from '@/components/layout/AppShell';
 import ProjektyClient from '@/components/projects/ProjektyClient';
-import type { ProjectListItem } from '@/app/api/projekty/route';
 
 type FilterOption = { id: string; name: string };
 

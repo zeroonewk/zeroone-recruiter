@@ -11,6 +11,7 @@ type Props = {
 
 const NAV_LINKS = [
   { label: 'Projekty', href: '/projekty' },
+  { label: 'Dashboard', href: '/dashboard' },
   { label: 'Ustawienia', href: '/ustawienia' },
 ] as const;
 
