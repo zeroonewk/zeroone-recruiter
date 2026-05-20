@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 
 export default function ZalogujPage() {
@@ -40,8 +41,14 @@ export default function ZalogujPage() {
     <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
       <div className="w-full max-w-[400px] bg-white border border-gray-200 rounded-lg p-8">
         <div className="mb-6">
-          <div className="text-xl font-bold tracking-widest text-black mb-4">
-            ZEROONE
+          <div className="flex justify-center mb-6">
+            <Image
+              src="/zeroone-logo.png"
+              alt="Zeroone Recruiter"
+              width={320}
+              height={40}
+              priority
+            />
           </div>
           <h1 className="text-2xl font-bold text-gray-900 mb-2">
             Zeroone Recruiter

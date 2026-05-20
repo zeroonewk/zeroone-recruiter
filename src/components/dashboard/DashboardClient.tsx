@@ -10,6 +10,7 @@ import {
   YAxis,
   Tooltip,
   ResponsiveContainer,
+  LabelList,
   PieChart,
   Pie,
   Cell,
@@ -191,7 +192,7 @@ export default function DashboardClient({ initialData, period }: Props) {
               <BarChart
                 layout="vertical"
                 data={workload}
-                margin={{ top: 0, right: 24, bottom: 0, left: 0 }}
+                margin={{ top: 0, right: 40, bottom: 0, left: 0 }}
               >
                 <XAxis type="number" hide />
                 <YAxis
@@ -206,7 +207,13 @@ export default function DashboardClient({ initialData, period }: Props) {
                   {...TOOLTIP_STYLE}
                   formatter={(value) => [`${value} projektow`, '']}
                 />
-                <Bar dataKey="active_count" fill="#FF5A3C" radius={[0, 4, 4, 0]} />
+                <Bar dataKey="active_count" fill="#FF5A3C" radius={[0, 4, 4, 0]}>
+                  <LabelList
+                    dataKey="active_count"
+                    position="right"
+                    style={{ fill: '#374151', fontSize: 12, fontWeight: 600 }}
+                  />
+                </Bar>
               </BarChart>
             </ResponsiveContainer>
           )}
@@ -222,7 +229,7 @@ export default function DashboardClient({ initialData, period }: Props) {
             <ResponsiveContainer width="100%" height={240}>
               <BarChart
                 data={stagesOverview}
-                margin={{ top: 4, right: 8, bottom: 40, left: 0 }}
+                margin={{ top: 20, right: 8, bottom: 40, left: 0 }}
               >
                 <XAxis
                   dataKey="stage_name"
@@ -238,7 +245,13 @@ export default function DashboardClient({ initialData, period }: Props) {
                   {...TOOLTIP_STYLE}
                   formatter={(value) => [`${value} projektow`, '']}
                 />
-                <Bar dataKey="project_count" fill="#3B82F6" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="project_count" fill="#3B82F6" radius={[4, 4, 0, 0]}>
+                  <LabelList
+                    dataKey="project_count"
+                    position="top"
+                    style={{ fill: '#374151', fontSize: 12, fontWeight: 600 }}
+                  />
+                </Bar>
               </BarChart>
             </ResponsiveContainer>
           )}
@@ -273,7 +286,7 @@ export default function DashboardClient({ initialData, period }: Props) {
                   <BarChart
                     layout="vertical"
                     data={points.ranking}
-                    margin={{ top: 0, right: 24, bottom: 0, left: 0 }}
+                    margin={{ top: 0, right: 40, bottom: 0, left: 0 }}
                   >
                     <XAxis type="number" hide />
                     <YAxis
@@ -288,7 +301,13 @@ export default function DashboardClient({ initialData, period }: Props) {
                       {...TOOLTIP_STYLE}
                       formatter={(value) => [`${value} pkt`, '']}
                     />
-                    <Bar dataKey="points" fill="#FF5A3C" radius={[0, 4, 4, 0]} />
+                    <Bar dataKey="points" fill="#FF5A3C" radius={[0, 4, 4, 0]}>
+                      <LabelList
+                        dataKey="points"
+                        position="right"
+                        style={{ fill: '#374151', fontSize: 12, fontWeight: 600 }}
+                      />
+                    </Bar>
                   </BarChart>
                 </ResponsiveContainer>
               )}
@@ -391,6 +410,8 @@ export default function DashboardClient({ initialData, period }: Props) {
                     cx="50%"
                     cy="50%"
                     outerRadius={80}
+                    label={({ value }: { value: number }) => value}
+                    labelLine={false}
                   >
                     {data.map((entry, idx) => (
                       <Cell
