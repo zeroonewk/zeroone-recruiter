@@ -26,6 +26,7 @@ type PerfAvgRow = { avg_days: number | null };
 type PerfCountRow = { success: number; total: number };
 type SplitTypeRow = { id: string; name: string; count: number };
 type SplitStatusRow = { id: string; name: string; color: string; count: number };
+type ActiveTotalRow = { total_points: number; total_count: number };
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
@@ -129,6 +130,7 @@ export default async function DashboardPage({
     pointsResult,
     perfResult,
     splitResult,
+    activeTotalRaw,
   ] = await Promise.all([
     // Red (overdue) projects — top 100 for counting, top 3 for display
     sql`
@@ -204,6 +206,15 @@ export default async function DashboardPage({
         ORDER BY rs.position ASC
       `,
     ]),
+    // Active pipeline totals (period-independent)
+    sql`
+      SELECT
+        COALESCE(SUM(p.points), 0)::int AS total_points,
+        COUNT(p.id)::int AS total_count
+      FROM projects p
+      JOIN result_statuses rs ON rs.id = p.status_id
+      WHERE p.is_archived = FALSE AND rs.is_success = FALSE
+    `,
   ]);
 
   // ── Process results ────────────────────────────────────────────────────────
@@ -230,6 +241,7 @@ export default async function DashboardPage({
 
   const splitTypesRaw = splitResult[0] as SplitTypeRow[];
   const splitStatusesRaw = splitResult[1] as SplitStatusRow[];
+  const activeTotalRow = (activeTotalRaw as ActiveTotalRow[])[0];
 
   const initialData: DashboardData = {
     redProjects,
@@ -247,6 +259,10 @@ export default async function DashboardPage({
     split: {
       types: splitTypesRaw,
       statuses: splitStatusesRaw,
+      active_total: {
+        points: activeTotalRow?.total_points ?? 0,
+        count: activeTotalRow?.total_count ?? 0,
+      },
     },
   };
 

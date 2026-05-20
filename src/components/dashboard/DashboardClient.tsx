@@ -47,6 +47,7 @@ export type DashboardData = {
   split: {
     types: { id: string; name: string; count: number }[];
     statuses: { id: string; name: string; color: string; count: number }[];
+    active_total: { points: number; count: number };
   };
 };
 
@@ -85,6 +86,10 @@ const TOOLTIP_STYLE = {
 
 const CARD = 'bg-white border border-gray-200 rounded-lg p-6';
 const H3 = 'text-sm font-semibold text-gray-900';
+
+function pluralProjekty(n: number): string {
+  return n === 1 ? 'projekcie' : 'projektach';
+}
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
@@ -351,6 +356,23 @@ export default function DashboardClient({ initialData, period }: Props) {
               </button>
             </div>
           </div>
+
+          {split.active_total.count > 0 && (
+            <div className="mb-4 pb-4 border-b border-gray-100">
+              <div className="text-xs uppercase tracking-wide text-gray-600 mb-1">
+                Wartosc aktywnego pipeline
+              </div>
+              <div className="flex items-baseline gap-3">
+                <div className="text-3xl font-bold text-[#FF5A3C]">
+                  {split.active_total.points}
+                </div>
+                <div className="text-sm text-gray-500">
+                  pkt w {split.active_total.count}{' '}
+                  {pluralProjekty(split.active_total.count)}
+                </div>
+              </div>
+            </div>
+          )}
 
           {(() => {
             const data = splitView === 'types' ? split.types : split.statuses;
