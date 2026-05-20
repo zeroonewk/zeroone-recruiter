@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
@@ -26,7 +27,15 @@ export default function AppShell({ user, children }: Props) {
   return (
     <div className="min-h-screen bg-gray-50">
       <header className="fixed top-0 left-0 right-0 z-50 h-16 bg-white border-b border-gray-200 px-6 flex items-center justify-between gap-4">
-        <span className="font-bold tracking-wider text-[#FF5A3C] shrink-0">ZEROONE</span>
+        <Link href="/" className="shrink-0">
+          <Image
+            src="/zeroone-logo.png"
+            alt="Zeroone Recruiter"
+            width={224}
+            height={28}
+            priority
+          />
+        </Link>
 
         <nav className="flex-1 flex items-center gap-1">
           {NAV_LINKS.map((link) => {
