@@ -133,6 +133,7 @@ export default async function DashboardPage({
     activeTotalRaw,
   ] = await Promise.all([
     // Red (overdue) projects — top 100 for counting, top 3 for display
+    // Shows the most-overdue open stage per project (any stage, not just first by position)
     sql`
       SELECT
         p.id, p.title, c.name AS client_name, u.name AS owner_name,
@@ -145,13 +146,14 @@ export default async function DashboardPage({
       JOIN LATERAL (
         SELECT name, deadline
         FROM project_stages
-        WHERE project_id = p.id AND done_at IS NULL
-        ORDER BY position ASC
+        WHERE project_id = p.id
+          AND done_at IS NULL
+          AND deadline < CURRENT_DATE
+        ORDER BY deadline ASC
         LIMIT 1
       ) cur_stage ON true
       WHERE p.is_archived = FALSE
         AND rs.is_success = FALSE
-        AND cur_stage.deadline < CURRENT_DATE
       ORDER BY cur_stage.deadline ASC
       LIMIT 100
     `,

@@ -48,21 +48,20 @@ export async function GET(request: NextRequest) {
         cur_stage.name AS current_stage_name,
         cur_stage.deadline AS current_stage_deadline,
         cur_stage.position AS current_stage_position,
-        CASE
-          WHEN cur_stage.id IS NULL THEN false
-          WHEN cur_stage.deadline < CURRENT_DATE THEN true
-          ELSE false
-        END AS is_overdue
+        COALESCE(cur_stage.is_overdue, false) AS is_overdue
       FROM projects p
       JOIN clients c ON c.id = p.client_id
       JOIN project_types pt ON pt.id = p.project_type_id
       JOIN users u ON u.id = p.owner_id
       JOIN result_statuses rs ON rs.id = p.status_id
       LEFT JOIN LATERAL (
-        SELECT ps.id, ps.name, ps.position, ps.deadline
+        SELECT ps.id, ps.name, ps.position, ps.deadline,
+               (ps.deadline < CURRENT_DATE) AS is_overdue
         FROM project_stages ps
         WHERE ps.project_id = p.id AND ps.done_at IS NULL
-        ORDER BY ps.position ASC
+        ORDER BY
+          (ps.deadline < CURRENT_DATE) DESC,
+          ps.deadline ASC
         LIMIT 1
       ) cur_stage ON true
       WHERE (${archived} = TRUE OR p.is_archived = FALSE)
