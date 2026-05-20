@@ -4,6 +4,9 @@ import { sql } from '@/lib/db';
 import { toDateString } from '@/lib/dates';
 import AppShell from '@/components/layout/AppShell';
 import ProjektyClient from '@/components/projects/ProjektyClient';
+import type { ProjectListItem } from '@/app/api/projekty/route';
+
+export const dynamic = 'force-dynamic';
 
 type FilterOption = { id: string; name: string };
 
@@ -41,8 +44,7 @@ export default async function ProjektyPage() {
         ORDER BY ps.position ASC
         LIMIT 1
       ) cur_stage ON true
-      WHERE p.is_archived = FALSE
-      ORDER BY rs.is_success ASC, p.is_archived ASC, p.opened_at DESC
+      ORDER BY p.is_archived ASC, rs.is_success ASC, p.opened_at DESC
     `,
     sql`SELECT id, name FROM result_statuses WHERE is_archived = FALSE ORDER BY position ASC`,
     sql`SELECT id, name FROM project_types WHERE is_archived = FALSE ORDER BY name ASC`,
@@ -77,7 +79,7 @@ export default async function ProjektyPage() {
           current_stage_deadline: toDateString(r.current_stage_deadline),
           current_stage_position: (r.current_stage_position as number | null) ?? null,
           is_overdue: r.is_overdue as boolean,
-        }))}
+        })) as ProjectListItem[]}
         statuses={statusRows as FilterOption[]}
         types={typeRows as FilterOption[]}
         clients={clientRows as FilterOption[]}

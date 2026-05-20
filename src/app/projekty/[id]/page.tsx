@@ -58,7 +58,7 @@ export default async function ProjektDetailPage({
   const { id } = await params;
   if (!UUID_RE.test(id)) notFound();
 
-  const [projectRows, stageRows, statusRows] = await Promise.all([
+  const [projectRows, stageRows, statusRows, userRows] = await Promise.all([
     sql`
       SELECT
         p.id, p.title, p.points, p.notes, p.links, p.opened_at, p.closed_at, p.is_archived,
@@ -87,6 +87,7 @@ export default async function ProjektDetailPage({
       WHERE is_archived = FALSE
       ORDER BY position ASC
     `,
+    sql`SELECT id, name FROM users WHERE is_active = TRUE ORDER BY name ASC`,
   ]);
 
   if (!projectRows || projectRows.length === 0) notFound();
@@ -131,6 +132,7 @@ export default async function ProjektDetailPage({
         currentUserRole={session.role}
         currentUserId={session.sub}
         availableStatuses={statusRows as AvailableStatus[]}
+        availableUsers={userRows as { id: string; name: string }[]}
       />
     </AppShell>
   );

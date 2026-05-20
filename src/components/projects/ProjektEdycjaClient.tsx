@@ -12,16 +12,19 @@ type AvailableStatus = {
   is_success: boolean;
   position: number;
 };
+
 type Props = {
   initialProject: ProjectFull;
   initialStages: ProjectStage[];
   currentUserRole: 'admin' | 'recruiter';
   currentUserId: string;
   availableStatuses: AvailableStatus[];
+  availableUsers: { id: string; name: string }[];
 };
 
 type Toast = { type: 'success' | 'error'; message: string };
 type LinkDraft = { label: string; url: string };
+type Alloc = { user_id: string; points: number };
 
 const URL_RE = /^https?:\/\//;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -46,6 +49,7 @@ export default function ProjektEdycjaClient({
   initialStages,
   currentUserRole,
   availableStatuses,
+  availableUsers,
 }: Props) {
   const router = useRouter();
 
@@ -60,6 +64,14 @@ export default function ProjektEdycjaClient({
   const [savingStatus, setSavingStatus] = useState(false);
   const [savingStageId, setSavingStageId] = useState<string | null>(null);
   const [toast, setToast] = useState<Toast | null>(null);
+
+  // ── Close modal state ─────────────────────────────────────────────────────
+  const [closeModalOpen, setCloseModalOpen] = useState(false);
+  const [closeModalStatusId, setCloseModalStatusId] = useState<string | null>(null);
+  const [closeAllocs, setCloseAllocs] = useState<Alloc[]>([]);
+  const [closeDate, setCloseDate] = useState('');
+  const [closeError, setCloseError] = useState<string | null>(null);
+  const [submittingClose, setSubmittingClose] = useState(false);
 
   useEffect(() => {
     if (!toast) return;
@@ -231,7 +243,17 @@ export default function ProjektEdycjaClient({
   async function handleStatusChange(newStatusId: string) {
     if (newStatusId === project.status_id) return;
     const chosen = availableStatuses.find((s) => s.id === newStatusId);
-    if (!chosen || chosen.is_success) return;
+    if (!chosen) return;
+
+    if (chosen.is_success) {
+      setCloseModalStatusId(newStatusId);
+      setCloseAllocs([{ user_id: project.owner_id, points: project.points }]);
+      setCloseDate(todayStr());
+      setCloseError(null);
+      setCloseModalOpen(true);
+      return;
+    }
+
     setSavingStatus(true);
     try {
       const res = await fetch(`/api/projekty/${project.id}`, {
@@ -250,6 +272,79 @@ export default function ProjektEdycjaClient({
       showToast('error', 'Nie udalo sie zmienic statusu');
     } finally {
       setSavingStatus(false);
+    }
+  }
+
+  // ── Close modal handlers ──────────────────────────────────────────────────
+
+  function updateCloseAlloc(idx: number, field: 'user_id' | 'points', value: string | number) {
+    setCloseAllocs((prev) =>
+      prev.map((a, i) => (i === idx ? { ...a, [field]: value } : a))
+    );
+  }
+
+  function removeCloseAlloc(idx: number) {
+    setCloseAllocs((prev) => prev.filter((_, i) => i !== idx));
+  }
+
+  function addCloseAlloc() {
+    setCloseAllocs((prev) => [...prev, { user_id: '', points: 0 }]);
+  }
+
+  function handleCloseModalCancel() {
+    setCloseModalOpen(false);
+    setCloseModalStatusId(null);
+    setCloseAllocs([]);
+    setCloseDate('');
+    setCloseError(null);
+  }
+
+  async function handleCloseSubmit() {
+    setCloseError(null);
+
+    if (closeAllocs.some((a) => !a.user_id)) {
+      setCloseError('Wybierz rekrutera dla kazdej alokacji');
+      return;
+    }
+    if (closeAllocs.some((a) => a.points < 1)) {
+      setCloseError('Punkty alokacji musza byc wieksze od 0');
+      return;
+    }
+    const closeSum = closeAllocs.reduce((acc, a) => acc + a.points, 0);
+    if (closeSum !== project.points) {
+      setCloseError(
+        `Suma punktow (${closeSum}) musi rownic sie puli projektu (${project.points})`
+      );
+      return;
+    }
+    if (!DATE_RE.test(closeDate)) {
+      setCloseError('Nieprawidlowa data zamkniecia');
+      return;
+    }
+
+    setSubmittingClose(true);
+    try {
+      const res = await fetch(`/api/projekty/${project.id}/zamknij`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          status_id: closeModalStatusId,
+          closed_at: closeDate,
+          allocations: closeAllocs,
+        }),
+      });
+      const data = (await res.json()) as { ok: boolean; error?: string };
+      if (data.ok) {
+        setCloseModalOpen(false);
+        showToast('success', 'Projekt zamkniety');
+        router.refresh();
+      } else {
+        setCloseError(data.error ?? 'Blad serwera');
+      }
+    } catch {
+      setCloseError('Blad polaczenia z serwerem');
+    } finally {
+      setSubmittingClose(false);
     }
   }
 
@@ -281,6 +376,17 @@ export default function ProjektEdycjaClient({
       showToast('error', 'Blad polaczenia z serwerem');
     }
   }
+
+  // ── Derived close modal values ────────────────────────────────────────────
+
+  const closeSum = closeAllocs.reduce((acc, a) => acc + (a.points || 0), 0);
+  const sumOk = closeSum === project.points;
+  const closeCanSubmit =
+    !submittingClose &&
+    closeAllocs.length > 0 &&
+    closeAllocs.every((a) => a.user_id && a.points >= 1) &&
+    sumOk &&
+    DATE_RE.test(closeDate);
 
   // ── Styles ────────────────────────────────────────────────────────────────
 
@@ -414,16 +520,12 @@ export default function ProjektEdycjaClient({
                       className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-[#FF5A3C] focus:border-transparent disabled:bg-gray-50 disabled:cursor-not-allowed"
                     >
                       {availableStatuses.map((s) => (
-                        <option key={s.id} value={s.id} disabled={s.is_success}>
+                        <option key={s.id} value={s.id}>
                           {s.name}
-                          {s.is_success ? ' (uzyj zamykania projektu)' : ''}
                         </option>
                       ))}
                     </select>
                   </div>
-                  <p className="text-xs text-gray-500 mt-1">
-                    Aby zamknac z sukcesem, uzyj funkcji zamykania projektu (wkrotce).
-                  </p>
                 </dd>
               </div>
               <div className="py-2 flex justify-between gap-4">
@@ -590,6 +692,126 @@ export default function ProjektEdycjaClient({
           </div>
         </div>
       </div>
+
+      {/* ── Close project modal ───────────────────────────────────────────── */}
+      {closeModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-lg mx-4">
+            <div className="px-6 py-4 border-b border-gray-200">
+              <h2 className="text-base font-semibold text-gray-900">Zamknij projekt</h2>
+              <p className="text-sm text-gray-500 mt-0.5">
+                Przypisz punkty rekruterom i ustaw date zamkniecia.
+              </p>
+            </div>
+
+            <div className="px-6 py-4 space-y-4">
+              {/* Allocations */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-sm font-medium text-gray-700">
+                    Alokacja punktow (pula: {project.points} pkt)
+                  </p>
+                  <button
+                    type="button"
+                    onClick={addCloseAlloc}
+                    disabled={closeAllocs.length >= 20}
+                    className="text-sm text-[#FF5A3C] hover:underline disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    + Dodaj rekrutera
+                  </button>
+                </div>
+                <div className="space-y-2">
+                  {closeAllocs.map((alloc, idx) => (
+                    <div key={idx} className="flex items-center gap-2">
+                      <select
+                        value={alloc.user_id}
+                        onChange={(e) => updateCloseAlloc(idx, 'user_id', e.target.value)}
+                        className="flex-1 px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-[#FF5A3C] focus:border-transparent"
+                      >
+                        <option value="">-- wybierz --</option>
+                        {availableUsers.map((u) => (
+                          <option
+                            key={u.id}
+                            value={u.id}
+                            disabled={closeAllocs.some((a, i) => i !== idx && a.user_id === u.id)}
+                          >
+                            {u.name}
+                          </option>
+                        ))}
+                      </select>
+                      <input
+                        type="number"
+                        min={1}
+                        max={25}
+                        value={alloc.points || ''}
+                        onChange={(e) =>
+                          updateCloseAlloc(idx, 'points', Number(e.target.value))
+                        }
+                        className="w-20 px-2 py-2 border border-gray-300 rounded-md text-sm text-center focus:outline-none focus:ring-2 focus:ring-[#FF5A3C] focus:border-transparent"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => removeCloseAlloc(idx)}
+                        disabled={closeAllocs.length <= 1}
+                        className="text-gray-400 hover:text-red-600 transition-colors px-1 text-xl leading-none disabled:opacity-30 disabled:cursor-not-allowed"
+                        aria-label="Usun rekrutera"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ))}
+                </div>
+                <p
+                  className={`text-sm mt-2 font-medium ${
+                    sumOk ? 'text-green-600' : 'text-red-600'
+                  }`}
+                >
+                  Suma: {closeSum} / {project.points} pkt
+                </p>
+              </div>
+
+              {/* Close date */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Data zamkniecia
+                </label>
+                <input
+                  type="date"
+                  value={closeDate}
+                  onChange={(e) => setCloseDate(e.target.value)}
+                  className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-[#FF5A3C] focus:border-transparent"
+                />
+              </div>
+
+              {/* Error */}
+              {closeError && (
+                <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-md">
+                  {closeError}
+                </p>
+              )}
+            </div>
+
+            <div className="px-6 py-4 border-t border-gray-200 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={handleCloseModalCancel}
+                disabled={submittingClose}
+                className="px-4 py-2 text-sm border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors disabled:opacity-60"
+              >
+                Anuluj
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleCloseSubmit()}
+                disabled={!closeCanSubmit}
+                className={btnPrimary}
+              >
+                {submittingClose ? 'Zamykanie...' : 'Zamknij projekt'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Toast */}
       {toast && (
