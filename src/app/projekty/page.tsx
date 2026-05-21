@@ -38,6 +38,8 @@ export default async function ProjektyPage() {
                (ps.deadline < CURRENT_DATE) AS is_overdue
         FROM project_stages ps
         WHERE ps.project_id = p.id AND ps.done_at IS NULL
+          AND p.closed_at IS NULL
+          AND rs.is_success = FALSE
         ORDER BY
           (ps.deadline < CURRENT_DATE) DESC,
           ps.deadline ASC
