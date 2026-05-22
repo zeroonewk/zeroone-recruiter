@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { sql } from '@/lib/db';
 import { requireSession } from '@/lib/auth';
+import { normalizeFunnel, FUNNEL_LEVELS, type FunnelData } from '@/lib/funnel';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const URL_RE = /^https?:\/\//;
@@ -16,6 +17,7 @@ export type ProjectFull = {
   opened_at: string;
   closed_at: string | null;
   is_archived: boolean;
+  funnel: FunnelData;
   client_id: string;
   client_name: string;
   type_id: string;
@@ -40,10 +42,13 @@ export type ProjectStage = {
 
 type RouteContext = { params: Promise<{ id: string }> };
 
+type ProjectFullRaw = Omit<ProjectFull, 'funnel'> & { funnel: unknown };
+
 async function fetchProjectFull(id: string): Promise<ProjectFull | null> {
   const rows = (await sql`
     SELECT
       p.id, p.title, p.points, p.notes, p.links, p.opened_at, p.closed_at, p.is_archived,
+      p.funnel,
       c.id AS client_id, c.name AS client_name,
       pt.id AS type_id, pt.name AS type_name,
       u.id AS owner_id, u.name AS owner_name, u.email AS owner_email,
@@ -56,8 +61,9 @@ async function fetchProjectFull(id: string): Promise<ProjectFull | null> {
     JOIN result_statuses rs ON rs.id = p.status_id
     WHERE p.id = ${id}::uuid
     LIMIT 1
-  `) as ProjectFull[];
-  return rows[0] ?? null;
+  `) as ProjectFullRaw[];
+  if (!rows[0]) return null;
+  return { ...rows[0], funnel: normalizeFunnel(rows[0].funnel) };
 }
 
 export async function GET(_req: NextRequest, { params }: RouteContext) {
@@ -196,6 +202,38 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
       }
       setClauses.push(`status_id = $${i++}::uuid`);
       values.push(body.status_id);
+    }
+
+    if ('funnel' in body) {
+      const rawFunnel = body.funnel;
+      if (!rawFunnel || typeof rawFunnel !== 'object' || Array.isArray(rawFunnel)) {
+        return NextResponse.json(
+          { ok: false, error: 'Nieprawidlowe dane lejka' },
+          { status: 400 }
+        );
+      }
+      const fobj = rawFunnel as Record<string, unknown>;
+      const funnelKeys = FUNNEL_LEVELS.map((l) => l.key);
+      if (Object.keys(fobj).length !== 7 || !funnelKeys.every((k) => k in fobj)) {
+        return NextResponse.json(
+          { ok: false, error: 'Nieprawidlowe dane lejka' },
+          { status: 400 }
+        );
+      }
+      for (const k of funnelKeys) {
+        const v = fobj[k];
+        if (!Number.isInteger(v) || (v as number) < 0) {
+          return NextResponse.json(
+            { ok: false, error: 'Nieprawidlowe dane lejka' },
+            { status: 400 }
+          );
+        }
+      }
+      const funnel = Object.fromEntries(
+        funnelKeys.map((k) => [k, fobj[k] as number])
+      ) as FunnelData;
+      setClauses.push(`funnel = $${i++}::jsonb`);
+      values.push(JSON.stringify(funnel));
     }
 
     if ('is_archived' in body) {

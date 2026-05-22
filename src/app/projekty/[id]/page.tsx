@@ -2,6 +2,7 @@ import { notFound, redirect } from 'next/navigation';
 import { getSession } from '@/lib/auth';
 import { sql } from '@/lib/db';
 import { toDateString } from '@/lib/dates';
+import { normalizeFunnel } from '@/lib/funnel';
 import AppShell from '@/components/layout/AppShell';
 import ProjektEdycjaClient from '@/components/projects/ProjektEdycjaClient';
 import type { ProjectFull, ProjectStage } from '@/app/api/projekty/[id]/route';
@@ -25,6 +26,7 @@ type ProjectRowRaw = {
   opened_at: unknown;
   closed_at: unknown;
   is_archived: boolean;
+  funnel: unknown;
   client_id: string;
   client_name: string;
   type_id: string;
@@ -62,6 +64,7 @@ export default async function ProjektDetailPage({
     sql`
       SELECT
         p.id, p.title, p.points, p.notes, p.links, p.opened_at, p.closed_at, p.is_archived,
+        p.funnel,
         c.id AS client_id, c.name AS client_name,
         pt.id AS type_id, pt.name AS type_name,
         u.id AS owner_id, u.name AS owner_name, u.email AS owner_email,
@@ -102,6 +105,7 @@ export default async function ProjektDetailPage({
     opened_at: toDateString(raw.opened_at) ?? '',
     closed_at: toDateString(raw.closed_at),
     is_archived: raw.is_archived,
+    funnel: normalizeFunnel(raw.funnel),
     client_id: raw.client_id,
     client_name: raw.client_name,
     type_id: raw.type_id,

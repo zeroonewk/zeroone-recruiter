@@ -4,6 +4,8 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import type { ProjectFull, ProjectStage } from '@/app/api/projekty/[id]/route';
+import FunnelCard from '@/components/projects/FunnelCard';
+import type { FunnelData } from '@/lib/funnel';
 
 type AvailableStatus = {
   id: string;
@@ -691,6 +693,16 @@ export default function ProjektEdycjaClient({
             )}
           </div>
         </div>
+      </div>
+
+      {/* Funnel */}
+      <div className="mt-6">
+        <FunnelCard
+          projectId={project.id}
+          initialFunnel={project.funnel}
+          onUpdate={(newFunnel: FunnelData) => setProject((prev) => ({ ...prev, funnel: newFunnel }))}
+          showToast={showToast}
+        />
       </div>
 
       {/* ── Close project modal ───────────────────────────────────────────── */}

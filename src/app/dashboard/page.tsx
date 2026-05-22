@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation';
 import { getSession } from '@/lib/auth';
 import { sql } from '@/lib/db';
 import { toDateString } from '@/lib/dates';
+import { normalizeFunnel } from '@/lib/funnel';
 import AppShell from '@/components/layout/AppShell';
 import DashboardClient from '@/components/dashboard/DashboardClient';
 import type { DashboardData, Period } from '@/components/dashboard/DashboardClient';
@@ -131,6 +132,7 @@ export default async function DashboardPage({
     perfResult,
     splitResult,
     activeTotalRaw,
+    funnelTotalsRaw,
   ] = await Promise.all([
     // Red (overdue) projects — top 100 for counting, top 3 for display
     // Shows the most-overdue open stage per project (any stage, not just first by position)
@@ -217,6 +219,20 @@ export default async function DashboardPage({
       JOIN result_statuses rs ON rs.id = p.status_id
       WHERE p.is_archived = FALSE AND rs.is_success = FALSE
     `,
+    // Funnel totals across all active projects
+    sql`
+      SELECT
+        COALESCE(SUM((funnel->>'sourcing')::int), 0)::int AS sourcing,
+        COALESCE(SUM((funnel->>'screening')::int), 0)::int AS screening,
+        COALESCE(SUM((funnel->>'weryfikacja')::int), 0)::int AS weryfikacja,
+        COALESCE(SUM((funnel->>'rekomendacje')::int), 0)::int AS rekomendacje,
+        COALESCE(SUM((funnel->>'spotkania')::int), 0)::int AS spotkania,
+        COALESCE(SUM((funnel->>'oferta')::int), 0)::int AS oferta,
+        COALESCE(SUM((funnel->>'zatrudnienie')::int), 0)::int AS zatrudnienie
+      FROM projects p
+      JOIN result_statuses rs ON rs.id = p.status_id
+      WHERE p.is_archived = FALSE AND rs.is_success = FALSE
+    `,
   ]);
 
   // ── Process results ────────────────────────────────────────────────────────
@@ -244,6 +260,7 @@ export default async function DashboardPage({
   const splitTypesRaw = splitResult[0] as SplitTypeRow[];
   const splitStatusesRaw = splitResult[1] as SplitStatusRow[];
   const activeTotalRow = (activeTotalRaw as ActiveTotalRow[])[0];
+  const funnelTotals = normalizeFunnel((funnelTotalsRaw as unknown[])[0]);
 
   const initialData: DashboardData = {
     redProjects,
@@ -266,6 +283,7 @@ export default async function DashboardPage({
         count: activeTotalRow?.total_count ?? 0,
       },
     },
+    funnelTotals,
   };
 
   return (

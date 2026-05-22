@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { FUNNEL_LEVELS, pct, type FunnelData } from '@/lib/funnel';
 import {
   BarChart,
   Bar,
@@ -50,6 +51,7 @@ export type DashboardData = {
     statuses: { id: string; name: string; color: string; count: number }[];
     active_total: { points: number; count: number };
   };
+  funnelTotals: FunnelData;
 };
 
 type Props = {
@@ -96,7 +98,7 @@ function pluralProjekty(n: number): string {
 
 export default function DashboardClient({ initialData, period }: Props) {
   const router = useRouter();
-  const { redProjects, workload, stagesOverview, points, performance, split } = initialData;
+  const { redProjects, workload, stagesOverview, points, performance, split, funnelTotals } = initialData;
   const [splitView, setSplitView] = useState<'types' | 'statuses'>('types');
 
   function handlePeriod(param: string) {
@@ -434,6 +436,82 @@ export default function DashboardClient({ initialData, period }: Props) {
             );
           })()}
         </div>
+      </div>
+
+      {/* Funnel widget */}
+      <div className="mt-6">
+        <FunnelWidget data={funnelTotals} />
+      </div>
+    </div>
+  );
+}
+
+// ── FunnelWidget ──────────────────────────────────────────────────────────────
+
+function FunnelWidget({ data }: { data: FunnelData }) {
+  const total = FUNNEL_LEVELS.reduce((sum, lvl) => sum + data[lvl.key], 0);
+
+  if (total === 0) {
+    return (
+      <div className={CARD}>
+        <h2 className="text-xl font-bold mb-1">Lejek zespolu</h2>
+        <p className="text-sm text-gray-500 mb-6">
+          Suma kandydatow ze wszystkich aktywnych projektow
+        </p>
+        <p className="text-sm text-gray-400 text-center py-6">Brak danych w lejku</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className={CARD}>
+      <h2 className="text-xl font-bold mb-1">Lejek zespolu</h2>
+      <p className="text-sm text-gray-500 mb-6">
+        Suma kandydatow ze wszystkich aktywnych projektow
+      </p>
+
+      <div className="space-y-3">
+        {FUNNEL_LEVELS.map((lvl, idx) => {
+          const value = data[lvl.key];
+          const prev = idx > 0 ? FUNNEL_LEVELS[idx - 1] : null;
+          const prevValue = prev ? data[prev.key] : null;
+          const barWidth =
+            data.sourcing === 0
+              ? '0%'
+              : `${Math.min(100, (value / data.sourcing) * 100)}%`;
+
+          return (
+            <div key={lvl.key} className="grid grid-cols-[200px_1fr_120px] gap-4 items-center">
+              {/* Label */}
+              <div className="font-medium text-sm text-gray-900">{lvl.label}</div>
+
+              {/* Bar + value overlay */}
+              <div className="relative bg-gray-100 rounded h-8 overflow-hidden">
+                <div
+                  className="bg-[#FF5A3C] h-8 rounded transition-all"
+                  style={{ width: barWidth }}
+                />
+                <div className="absolute inset-0 flex items-center px-3 text-sm font-medium text-gray-900">
+                  {value}
+                </div>
+              </div>
+
+              {/* Conversion */}
+              <div className="text-sm text-gray-700 text-right">
+                {idx === 0 ? (
+                  <span className="text-xs text-gray-500">Baza</span>
+                ) : (
+                  <>
+                    <div>{prevValue !== null ? pct(value, prevValue) : '—'}</div>
+                    <div className="text-xs text-gray-500 mt-0.5">
+                      {pct(value, data.sourcing)} od bazy
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
