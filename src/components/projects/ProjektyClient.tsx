@@ -2,6 +2,7 @@
 
 import { useState, useMemo } from 'react';
 import Link from 'next/link';
+import { useRouter, useSearchParams } from 'next/navigation';
 import type { ProjectListItem } from '@/app/api/projekty/route';
 
 type FilterOption = { id: string; name: string };
@@ -29,12 +30,36 @@ export default function ProjektyClient({
   clients,
   users,
 }: Props) {
-  const [search, setSearch] = useState('');
-  const [statusId, setStatusId] = useState('');
-  const [ownerId, setOwnerId] = useState('');
-  const [clientId, setClientId] = useState('');
-  const [typeId, setTypeId] = useState('');
-  const [showArchived, setShowArchived] = useState(false);
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
+  const [search, setSearch] = useState(() => searchParams.get('q') ?? '');
+  const [statusId, setStatusId] = useState(() => searchParams.get('status') ?? '');
+  const [ownerId, setOwnerId] = useState(() => searchParams.get('owner') ?? '');
+  const [clientId, setClientId] = useState(() => searchParams.get('klient') ?? '');
+  const [typeId, setTypeId] = useState(() => searchParams.get('typ') ?? '');
+  const [showArchived, setShowArchived] = useState(() => searchParams.get('archiwum') === '1');
+
+  function syncUrl(
+    q: string,
+    st: string,
+    ow: string,
+    cl: string,
+    ty: string,
+    arch: boolean,
+  ) {
+    const params = new URLSearchParams();
+    if (q) params.set('q', q);
+    if (st) params.set('status', st);
+    if (ow) params.set('owner', ow);
+    if (cl) params.set('klient', cl);
+    if (ty) params.set('typ', ty);
+    if (arch) params.set('archiwum', '1');
+    const qs = params.toString();
+    router.replace(qs ? `/projekty?${qs}` : '/projekty');
+  }
+
+  const hasFilters = !!(search || statusId || ownerId || clientId || typeId || showArchived);
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase().trim();
@@ -67,10 +92,22 @@ export default function ProjektyClient({
           type="text"
           placeholder="Szukaj..."
           value={search}
-          onChange={(e) => setSearch(e.target.value)}
+          onChange={(e) => {
+            const v = e.target.value;
+            setSearch(v);
+            syncUrl(v, statusId, ownerId, clientId, typeId, showArchived);
+          }}
           className="px-3 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#FF5A3C] focus:border-transparent min-w-[160px]"
         />
-        <select value={statusId} onChange={(e) => setStatusId(e.target.value)} className={selectCls}>
+        <select
+          value={statusId}
+          onChange={(e) => {
+            const v = e.target.value;
+            setStatusId(v);
+            syncUrl(search, v, ownerId, clientId, typeId, showArchived);
+          }}
+          className={selectCls}
+        >
           <option value="">Wszystkie statusy</option>
           {statuses.map((s) => (
             <option key={s.id} value={s.id}>
@@ -78,7 +115,15 @@ export default function ProjektyClient({
             </option>
           ))}
         </select>
-        <select value={clientId} onChange={(e) => setClientId(e.target.value)} className={selectCls}>
+        <select
+          value={clientId}
+          onChange={(e) => {
+            const v = e.target.value;
+            setClientId(v);
+            syncUrl(search, statusId, ownerId, v, typeId, showArchived);
+          }}
+          className={selectCls}
+        >
           <option value="">Wszyscy klienci</option>
           {clients.map((c) => (
             <option key={c.id} value={c.id}>
@@ -86,7 +131,15 @@ export default function ProjektyClient({
             </option>
           ))}
         </select>
-        <select value={ownerId} onChange={(e) => setOwnerId(e.target.value)} className={selectCls}>
+        <select
+          value={ownerId}
+          onChange={(e) => {
+            const v = e.target.value;
+            setOwnerId(v);
+            syncUrl(search, statusId, v, clientId, typeId, showArchived);
+          }}
+          className={selectCls}
+        >
           <option value="">Wszyscy ownerzy</option>
           {users.map((u) => (
             <option key={u.id} value={u.id}>
@@ -94,7 +147,15 @@ export default function ProjektyClient({
             </option>
           ))}
         </select>
-        <select value={typeId} onChange={(e) => setTypeId(e.target.value)} className={selectCls}>
+        <select
+          value={typeId}
+          onChange={(e) => {
+            const v = e.target.value;
+            setTypeId(v);
+            syncUrl(search, statusId, ownerId, clientId, v, showArchived);
+          }}
+          className={selectCls}
+        >
           <option value="">Wszystkie typy</option>
           {types.map((t) => (
             <option key={t.id} value={t.id}>
@@ -102,15 +163,36 @@ export default function ProjektyClient({
             </option>
           ))}
         </select>
-        <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer ml-auto select-none">
+        <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer select-none">
           <input
             type="checkbox"
             checked={showArchived}
-            onChange={(e) => setShowArchived(e.target.checked)}
+            onChange={(e) => {
+              const v = e.target.checked;
+              setShowArchived(v);
+              syncUrl(search, statusId, ownerId, clientId, typeId, v);
+            }}
             className="rounded"
           />
           Pokaż zarchiwizowane
         </label>
+        {hasFilters && (
+          <button
+            type="button"
+            onClick={() => {
+              setSearch('');
+              setStatusId('');
+              setOwnerId('');
+              setClientId('');
+              setTypeId('');
+              setShowArchived(false);
+              router.replace('/projekty');
+            }}
+            className="ml-auto text-sm text-gray-500 hover:text-gray-700 underline"
+          >
+            Wyczysc filtry
+          </button>
+        )}
       </div>
 
       {/* Table / empty state */}

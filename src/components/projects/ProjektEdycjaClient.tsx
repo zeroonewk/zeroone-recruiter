@@ -381,6 +381,8 @@ export default function ProjektEdycjaClient({
 
   // ── Derived close modal values ────────────────────────────────────────────
 
+  const isClosed = project.closed_at !== null || project.status_is_success;
+
   const closeSum = closeAllocs.reduce((acc, a) => acc + (a.points || 0), 0);
   const sumOk = closeSum === project.points;
   const closeCanSubmit =
@@ -517,7 +519,7 @@ export default function ProjektEdycjaClient({
                     />
                     <select
                       value={project.status_id}
-                      disabled={savingStatus}
+                      disabled={savingStatus || isClosed}
                       onChange={(e) => void handleStatusChange(e.target.value)}
                       className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-[#FF5A3C] focus:border-transparent disabled:bg-gray-50 disabled:cursor-not-allowed"
                     >
@@ -528,6 +530,11 @@ export default function ProjektEdycjaClient({
                       ))}
                     </select>
                   </div>
+                  {isClosed && (
+                    <p className="text-xs text-gray-500 mt-1">
+                      Projekt zostal zamkniety. Skontaktuj sie z administratorem aby cofnac.
+                    </p>
+                  )}
                 </dd>
               </div>
               <div className="py-2 flex justify-between gap-4">

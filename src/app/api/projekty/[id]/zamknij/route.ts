@@ -70,7 +70,13 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
     const userIds = parsed.map((a) => a.user_id);
 
     const [projectRows, statusRows, userCountRows] = await Promise.all([
-      sql`SELECT points, owner_id FROM projects WHERE id = ${id}::uuid LIMIT 1`,
+      sql`
+        SELECT p.points, p.owner_id, p.closed_at, rs.is_success AS current_is_success
+        FROM projects p
+        JOIN result_statuses rs ON rs.id = p.status_id
+        WHERE p.id = ${id}::uuid
+        LIMIT 1
+      `,
       sql`SELECT is_success FROM result_statuses WHERE id = ${status_id}::uuid LIMIT 1`,
       sql.query(
         `SELECT COUNT(*)::int AS cnt FROM users WHERE id = ANY($1::uuid[]) AND is_active = TRUE`,
@@ -78,9 +84,21 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
       ),
     ]);
 
-    const project = (projectRows as { points: number; owner_id: string }[])[0];
+    const project = (projectRows as {
+      points: number;
+      owner_id: string;
+      closed_at: string | null;
+      current_is_success: boolean;
+    }[])[0];
     if (!project) {
       return NextResponse.json({ ok: false, error: 'Projekt nie istnieje' }, { status: 404 });
+    }
+
+    if (project.closed_at !== null || project.current_is_success) {
+      return NextResponse.json(
+        { ok: false, error: 'Projekt zostal juz zamkniety. Aby cofnac, skontaktuj sie z administratorem.' },
+        { status: 400 }
+      );
     }
 
     const status = (statusRows as { is_success: boolean }[])[0];

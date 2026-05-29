@@ -164,7 +164,17 @@ export default function DashboardClient({ initialData, period }: Props) {
               <span className="text-sm font-medium">Wszystko na czas</span>
             </div>
           ) : (
-            <div className="mt-3 space-y-1">
+            <div
+              className="mt-3 space-y-1 overflow-y-auto max-h-[180px]"
+              style={
+                redProjects.items.length > 3
+                  ? {
+                      maskImage: 'linear-gradient(to bottom, black 80%, transparent 100%)',
+                      WebkitMaskImage: 'linear-gradient(to bottom, black 80%, transparent 100%)',
+                    }
+                  : undefined
+              }
+            >
               {redProjects.items.map((item) => (
                 <Link
                   key={item.id}
