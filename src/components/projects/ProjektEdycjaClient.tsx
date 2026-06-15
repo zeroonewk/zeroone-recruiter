@@ -50,6 +50,7 @@ export default function ProjektEdycjaClient({
   initialProject,
   initialStages,
   currentUserRole,
+  currentUserId,
   availableStatuses,
   availableUsers,
 }: Props) {
@@ -64,6 +65,7 @@ export default function ProjektEdycjaClient({
   const [savingLinks, setSavingLinks] = useState(false);
   const [savingPoints, setSavingPoints] = useState(false);
   const [savingStatus, setSavingStatus] = useState(false);
+  const [savingOwner, setSavingOwner] = useState(false);
   const [savingStageId, setSavingStageId] = useState<string | null>(null);
   const [toast, setToast] = useState<Toast | null>(null);
 
@@ -274,6 +276,31 @@ export default function ProjektEdycjaClient({
       showToast('error', 'Nie udalo sie zmienic statusu');
     } finally {
       setSavingStatus(false);
+    }
+  }
+
+  // ── Owner handler ─────────────────────────────────────────────────────────
+
+  async function handleOwnerChange(newId: string) {
+    if (newId === project.owner_id) return;
+    setSavingOwner(true);
+    try {
+      const res = await fetch(`/api/projekty/${project.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ owner_id: newId }),
+      });
+      const data = (await res.json()) as { ok: boolean; project?: ProjectFull; error?: string };
+      if (data.ok && data.project) {
+        setProject(data.project);
+        showToast('success', 'Owner zaktualizowany');
+      } else {
+        showToast('error', data.error ?? 'Blad serwera');
+      }
+    } catch {
+      showToast('error', 'Blad polaczenia z serwerem');
+    } finally {
+      setSavingOwner(false);
     }
   }
 
@@ -505,9 +532,33 @@ export default function ProjektEdycjaClient({
                 <dt className="text-gray-500 shrink-0">Typ projektu</dt>
                 <dd className="text-gray-900 text-right">{project.type_name}</dd>
               </div>
-              <div className="py-2 flex justify-between gap-4">
-                <dt className="text-gray-500 shrink-0">Owner</dt>
-                <dd className="text-gray-900 text-right">{project.owner_name}</dd>
+              <div className="py-2">
+                <dt className="text-gray-500 text-sm mb-2">Owner</dt>
+                <dd>
+                  <select
+                    value={project.owner_id}
+                    disabled={
+                      isClosed ||
+                      savingOwner ||
+                      (currentUserRole !== 'admin' && currentUserId !== project.owner_id)
+                    }
+                    onChange={(e) => void handleOwnerChange(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-[#FF5A3C] focus:border-transparent disabled:bg-gray-50 disabled:cursor-not-allowed"
+                  >
+                    {availableUsers.map((u) => (
+                      <option key={u.id} value={u.id}>
+                        {u.name}
+                      </option>
+                    ))}
+                  </select>
+                  {isClosed ? (
+                    <p className="text-xs text-gray-500 mt-1">Projekt jest zamkniety</p>
+                  ) : currentUserRole !== 'admin' && currentUserId !== project.owner_id ? (
+                    <p className="text-xs text-gray-500 mt-1">
+                      Tylko admin lub aktualny owner moze zmienic
+                    </p>
+                  ) : null}
+                </dd>
               </div>
               <div className="py-2">
                 <dt className="text-gray-500 text-sm mb-2">Status</dt>

@@ -115,6 +115,7 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
     const setClauses: string[] = [];
     const values: unknown[] = [];
     let i = 1;
+    let pendingNewOwnerId: string | null = null;
 
     if ('title' in body) {
       const title = typeof body.title === 'string' ? body.title.trim() : '';
@@ -256,6 +257,54 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
       values.push(is_archived);
     }
 
+    if ('owner_id' in body) {
+      const newOwnerId = body.owner_id;
+      if (typeof newOwnerId !== 'string' || !UUID_RE.test(newOwnerId)) {
+        return NextResponse.json({ ok: false, error: 'Nieprawidlowe owner_id' }, { status: 400 });
+      }
+
+      const projRows = (await sql`
+        SELECT p.owner_id, p.closed_at, rs.is_success
+        FROM projects p
+        JOIN result_statuses rs ON rs.id = p.status_id
+        WHERE p.id = ${id}::uuid
+      `) as { owner_id: string; closed_at: string | null; is_success: boolean }[];
+
+      if (!projRows[0]) {
+        return NextResponse.json({ ok: false, error: 'Projekt nie istnieje' }, { status: 404 });
+      }
+      const { owner_id: currentOwnerId, closed_at, is_success } = projRows[0];
+
+      if (closed_at !== null || is_success) {
+        return NextResponse.json(
+          { ok: false, error: 'Projekt jest zamkniety, nie mozna zmienic ownera' },
+          { status: 400 }
+        );
+      }
+
+      if (session.role !== 'admin' && session.sub !== currentOwnerId) {
+        return NextResponse.json(
+          { ok: false, error: 'Tylko admin lub aktualny owner moze zmienic ownera' },
+          { status: 403 }
+        );
+      }
+
+      const userRows = (await sql`
+        SELECT id FROM users WHERE id = ${newOwnerId}::uuid AND is_active = TRUE
+      `) as { id: string }[];
+
+      if (!userRows[0]) {
+        return NextResponse.json(
+          { ok: false, error: 'Uzytkownik nie istnieje lub jest nieaktywny' },
+          { status: 400 }
+        );
+      }
+
+      setClauses.push(`owner_id = $${i++}::uuid`);
+      values.push(newOwnerId);
+      pendingNewOwnerId = newOwnerId;
+    }
+
     if (setClauses.length === 0) {
       return NextResponse.json({ ok: false, error: 'Brak pol do aktualizacji' }, { status: 400 });
     }
@@ -271,6 +320,15 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
 
     if (!updated || updated.length === 0) {
       return NextResponse.json({ ok: false, error: 'Projekt nie istnieje' }, { status: 404 });
+    }
+
+    if (pendingNewOwnerId !== null) {
+      const oid = pendingNewOwnerId;
+      await sql`DELETE FROM project_point_allocations WHERE project_id = ${id}::uuid`;
+      await sql`
+        INSERT INTO project_point_allocations (project_id, user_id, points)
+        VALUES (${id}::uuid, ${oid}::uuid, (SELECT points FROM projects WHERE id = ${id}::uuid))
+      `;
     }
 
     const project = await fetchProjectFull(id);
