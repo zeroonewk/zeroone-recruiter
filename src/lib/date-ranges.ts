@@ -47,6 +47,66 @@ export function getDateRange(period: PeriodKey, customStart?: string, customEnd?
     : { start: customEnd, end: customStart };
 }
 
+export function getComparisonRange(period: PeriodKey, currentRange: DateRange): DateRange {
+  const start = new Date(currentRange.start + 'T00:00:00Z');
+  const end = new Date(currentRange.end + 'T00:00:00Z');
+
+  if (period === 'today') {
+    const yesterday = new Date(start);
+    yesterday.setUTCDate(start.getUTCDate() - 1);
+    const yStr = yesterday.toISOString().slice(0, 10);
+    return { start: yStr, end: yStr };
+  }
+
+  if (period === 'this_week' || period === 'last_week') {
+    const prevEnd = new Date(start);
+    prevEnd.setUTCDate(start.getUTCDate() - 1);
+    const prevStart = new Date(prevEnd);
+    prevStart.setUTCDate(prevEnd.getUTCDate() - 6);
+    return {
+      start: prevStart.toISOString().slice(0, 10),
+      end: prevEnd.toISOString().slice(0, 10),
+    };
+  }
+
+  // custom: zakres tej samej dlugosci bezposrednio przed
+  const days = Math.floor((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+  const prevEnd = new Date(start);
+  prevEnd.setUTCDate(start.getUTCDate() - 1);
+  const prevStart = new Date(prevEnd);
+  prevStart.setUTCDate(prevEnd.getUTCDate() - days);
+  return {
+    start: prevStart.toISOString().slice(0, 10),
+    end: prevEnd.toISOString().slice(0, 10),
+  };
+}
+
+export type TrendDirection = 'up' | 'down' | 'flat' | 'new';
+
+export type Trend = {
+  direction: TrendDirection;
+  percent: number;
+  previous: number;
+};
+
+export function calculateTrend(current: number, previous: number, sensitivityPct: number = 5): Trend {
+  if (previous === 0 && current === 0) {
+    return { direction: 'flat', percent: 0, previous: 0 };
+  }
+  if (previous === 0 && current > 0) {
+    return { direction: 'new', percent: 0, previous: 0 };
+  }
+  const change = ((current - previous) / previous) * 100;
+  if (Math.abs(change) < sensitivityPct) {
+    return { direction: 'flat', percent: Math.abs(change), previous };
+  }
+  return {
+    direction: change > 0 ? 'up' : 'down',
+    percent: Math.abs(change),
+    previous,
+  };
+}
+
 export function formatRangePL(range: DateRange): string {
   const fmt = (s: string) => {
     const d = new Date(s + 'T00:00:00Z');

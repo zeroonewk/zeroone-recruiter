@@ -4,7 +4,8 @@ import { redirect } from 'next/navigation';
 import { getSession } from '@/lib/auth';
 import { sql } from '@/lib/db';
 import { toDateString } from '@/lib/dates';
-import { getDateRange } from '@/lib/date-ranges';
+import { getDateRange, getComparisonRange, calculateTrend } from '@/lib/date-ranges';
+import type { Trend } from '@/lib/date-ranges';
 import { normalizeFunnel, FUNNEL_LEVELS } from '@/lib/funnel';
 import AppShell from '@/components/layout/AppShell';
 import StatusMeetingClient from '@/components/status/StatusMeetingClient';
@@ -97,6 +98,13 @@ type InactiveProjectRaw = {
 
 type UserRow = { id: string; name: string };
 
+type NumbersPrevRaw = {
+  stages_closed_prev: number;
+  success_count_prev: number;
+  success_points_prev: number;
+  new_projects_prev: number;
+};
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default async function StatusPage({
@@ -132,6 +140,7 @@ export default async function StatusPage({
     range = { start: sevenDaysAgo.toISOString().slice(0, 10), end: todayStr };
   }
   const { start, end } = range;
+  const comparisonRange = getComparisonRange(period, range);
 
   // Parse recruiter filter
   const rawRekruter = typeof sp.rekruter === 'string' ? sp.rekruter : 'all';
@@ -157,6 +166,7 @@ export default async function StatusPage({
     upcomingRaw,
     inactiveRaw,
     numbersRaw,
+    numbersPrevRaw,
     usersRaw,
   ] = await Promise.all([
 
@@ -338,6 +348,30 @@ export default async function StatusPage({
       [userId, start, end]
     ),
 
+    // Liczby zbiorcze — poprzedni okres porownawczy
+    sql.query(
+      `SELECT
+         (SELECT COUNT(*)::int FROM project_stages ps
+          JOIN projects p ON p.id = ps.project_id
+          WHERE ps.done_at BETWEEN $2::date AND $3::date
+            AND ($1::uuid IS NULL OR p.owner_id = $1::uuid)) AS stages_closed_prev,
+         (SELECT COUNT(*)::int FROM projects p
+          JOIN result_statuses rs ON rs.id = p.status_id
+          WHERE p.closed_at BETWEEN $2::date AND $3::date
+            AND rs.is_success = TRUE
+            AND ($1::uuid IS NULL OR p.owner_id = $1::uuid)) AS success_count_prev,
+         (SELECT COALESCE(SUM(p.points), 0)::int FROM projects p
+          JOIN result_statuses rs ON rs.id = p.status_id
+          WHERE p.closed_at BETWEEN $2::date AND $3::date
+            AND rs.is_success = TRUE
+            AND ($1::uuid IS NULL OR p.owner_id = $1::uuid)) AS success_points_prev,
+         (SELECT COUNT(*)::int FROM projects p
+          WHERE p.opened_at BETWEEN $2::date AND $3::date
+            AND p.is_archived = FALSE
+            AND ($1::uuid IS NULL OR p.owner_id = $1::uuid)) AS new_projects_prev`,
+      [userId, comparisonRange.start, comparisonRange.end]
+    ),
+
     // Lista aktywnych userow do filtra
     sql`SELECT id, name FROM users WHERE is_active = TRUE ORDER BY name ASC`,
   ]);
@@ -437,6 +471,25 @@ export default async function StatusPage({
     new_projects: 0,
   };
 
+  const numbersPrevRow = (numbersPrevRaw as NumbersPrevRaw[])[0] ?? {
+    stages_closed_prev: 0,
+    success_count_prev: 0,
+    success_points_prev: 0,
+    new_projects_prev: 0,
+  };
+
+  const trends: {
+    stages_closed: Trend;
+    success_count: Trend;
+    success_points: Trend;
+    new_projects: Trend;
+  } = {
+    stages_closed: calculateTrend(numbersRow.stages_closed, numbersPrevRow.stages_closed_prev),
+    success_count: calculateTrend(numbersRow.success_count, numbersPrevRow.success_count_prev),
+    success_points: calculateTrend(numbersRow.success_points, numbersPrevRow.success_points_prev),
+    new_projects: calculateTrend(numbersRow.new_projects, numbersPrevRow.new_projects_prev),
+  };
+
   return (
     <AppShell user={{ name: session.name, email: session.email, role: session.role }}>
       <StatusMeetingClient
@@ -460,6 +513,8 @@ export default async function StatusPage({
         }
         currentUserId={session.sub}
         range={range}
+        trends={trends}
+        comparisonRange={comparisonRange}
       />
     </AppShell>
   );

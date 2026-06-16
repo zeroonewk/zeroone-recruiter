@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { FUNNEL_LEVELS } from '@/lib/funnel';
 import { formatRangePL } from '@/lib/date-ranges';
-import type { PeriodKey, DateRange } from '@/lib/date-ranges';
+import type { PeriodKey, DateRange, Trend } from '@/lib/date-ranges';
 
 // ── Exported types (imported by page.tsx) ─────────────────────────────────────
 
@@ -106,6 +106,13 @@ type Props = {
   customRange?: { od: string; do: string };
   currentUserId: string;
   range: DateRange;
+  trends: {
+    stages_closed: Trend;
+    success_count: Trend;
+    success_points: Trend;
+    new_projects: Trend;
+  };
+  comparisonRange: DateRange;
 };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -139,6 +146,28 @@ function InfoTip({ text }: { text: string }) {
   );
 }
 
+function TrendBadge({ trend }: { trend: Trend }) {
+  const config = {
+    up:   { arrow: '↑', color: 'text-green-700', sign: '+' },
+    down: { arrow: '↓', color: 'text-red-700',   sign: '-' },
+    flat: { arrow: '=', color: 'text-gray-500',  sign: '' },
+    new:  { arrow: '↑', color: 'text-green-700', sign: '' },
+  };
+  const c = config[trend.direction];
+  const text = trend.direction === 'flat'
+    ? 'bez zmiany'
+    : trend.direction === 'new'
+    ? 'nowy'
+    : `${c.sign}${trend.percent.toFixed(0)}%`;
+
+  return (
+    <span className={`text-xs font-medium ${c.color} mt-1 inline-flex items-center gap-1`}>
+      <span>{c.arrow}</span>
+      <span>{text}</span>
+    </span>
+  );
+}
+
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export default function StatusMeetingClient({
@@ -149,6 +178,8 @@ export default function StatusMeetingClient({
   customRange,
   currentUserId,
   range,
+  trends,
+  comparisonRange,
 }: Props) {
   const router = useRouter();
   const [customMode, setCustomMode] = useState(selectedPeriod === 'custom');
@@ -273,34 +304,44 @@ export default function StatusMeetingClient({
       </div>
 
       {/* ── Liczby ───────────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className={cardCls}>
-          <p className="text-xs text-gray-500 uppercase tracking-wide">
-            Etapy zrealizowane
-            <InfoTip text="Liczba etapow projektowych zamknietych ptaszkiem w wybranym okresie." />
-          </p>
-          <p className="text-3xl font-bold text-gray-900 mt-2">{numbers.stages_closed}</p>
+      <div>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className={cardCls}>
+            <p className="text-xs text-gray-500 uppercase tracking-wide">
+              Etapy zrealizowane
+              <InfoTip text="Liczba etapow projektowych zamknietych ptaszkiem w wybranym okresie." />
+            </p>
+            <p className="text-3xl font-bold text-gray-900 mt-2">{numbers.stages_closed}</p>
+            <TrendBadge trend={trends.stages_closed} />
+          </div>
+          <div className={cardCls}>
+            <p className="text-xs text-gray-500 uppercase tracking-wide">
+              Projekty zamkniete
+              <InfoTip text='Projekty z statusem "Zrealizowany" zamkniete w wybranym okresie.' />
+            </p>
+            <p className="text-3xl font-bold text-gray-900 mt-2">{numbers.success_count}</p>
+            <TrendBadge trend={trends.success_count} />
+          </div>
+          <div className={cardCls}>
+            <p className="text-xs text-gray-500 uppercase tracking-wide">
+              Nowe projekty
+              <InfoTip text="Projekty otwarte (data otwarcia) w wybranym okresie." />
+            </p>
+            <p className="text-3xl font-bold text-gray-900 mt-2">{numbers.new_projects}</p>
+            <TrendBadge trend={trends.new_projects} />
+          </div>
+          <div className={cardCls}>
+            <p className="text-xs text-gray-500 uppercase tracking-wide">
+              Punkty zdobyte
+              <InfoTip text="Suma punktow rekruterow z projektow zamknietych z sukcesem w okresie." />
+            </p>
+            <p className="text-3xl font-bold text-[#FF5A3C] mt-2">{numbers.success_points}</p>
+            <TrendBadge trend={trends.success_points} />
+          </div>
         </div>
-        <div className={cardCls}>
-          <p className="text-xs text-gray-500 uppercase tracking-wide">
-            Projekty zamkniete
-            <InfoTip text='Projekty z statusem "Zrealizowany" zamkniete w wybranym okresie.' />
-          </p>
-          <p className="text-3xl font-bold text-gray-900 mt-2">{numbers.success_count}</p>
-        </div>
-        <div className={cardCls}>
-          <p className="text-xs text-gray-500 uppercase tracking-wide">
-            Nowe projekty
-            <InfoTip text="Projekty otwarte (data otwarcia) w wybranym okresie." />
-          </p>
-          <p className="text-3xl font-bold text-gray-900 mt-2">{numbers.new_projects}</p>
-        </div>
-        <div className={cardCls}>
-          <p className="text-xs text-gray-500 uppercase tracking-wide">
-            Punkty zdobyte
-            <InfoTip text="Suma punktow rekruterow z projektow zamknietych z sukcesem w okresie." />
-          </p>
-          <p className="text-3xl font-bold text-[#FF5A3C] mt-2">{numbers.success_points}</p>
+        <div className="mt-3 text-xs text-gray-500 flex items-center justify-end">
+          <span>Trend porownywany z: {formatRangePL(comparisonRange)}</span>
+          <InfoTip text="Trend pokazuje zmiane wzgledem analogicznego poprzedniego okresu. Dla 'Ten tydzien' to poprzedni tydzien (Pon-Nd). Dla 'Dzis' to wczoraj. Dla zakresu niestandardowego — zakres tej samej dlugosci bezposrednio przed. Roznice mniejsze niz 5% pokazywane jako 'bez zmiany'." />
         </div>
       </div>
 
