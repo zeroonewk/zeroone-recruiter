@@ -122,7 +122,15 @@ export default async function StatusPage({
   const customDo = typeof sp.do === 'string' ? sp.do : undefined;
 
   // Compute date range
-  const range = getDateRange(period, customOd, customDo);
+  const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+  let range = getDateRange(period, customOd, customDo);
+  if (!DATE_RE.test(range.start) || !DATE_RE.test(range.end)) {
+    const today = new Date();
+    const todayStr = today.toISOString().slice(0, 10);
+    const sevenDaysAgo = new Date(today);
+    sevenDaysAgo.setDate(today.getDate() - 7);
+    range = { start: sevenDaysAgo.toISOString().slice(0, 10), end: todayStr };
+  }
   const { start, end } = range;
 
   // Parse recruiter filter

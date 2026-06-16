@@ -33,10 +33,18 @@ export function getDateRange(period: PeriodKey, customStart?: string, customEnd?
   }
 
   // custom
-  return {
-    start: customStart ?? todayStr,
-    end: customEnd ?? todayStr,
-  };
+  const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+  const sevenDaysAgo = new Date(today);
+  sevenDaysAgo.setDate(today.getDate() - 7);
+  const defaultStart = sevenDaysAgo.toISOString().slice(0, 10);
+
+  if (!customStart || !DATE_RE.test(customStart) || !customEnd || !DATE_RE.test(customEnd)) {
+    return { start: defaultStart, end: todayStr };
+  }
+
+  return customStart <= customEnd
+    ? { start: customStart, end: customEnd }
+    : { start: customEnd, end: customStart };
 }
 
 export function formatRangePL(range: DateRange): string {

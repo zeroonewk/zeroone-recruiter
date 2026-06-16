@@ -151,6 +151,7 @@ export default function StatusMeetingClient({
   range,
 }: Props) {
   const router = useRouter();
+  const [customMode, setCustomMode] = useState(selectedPeriod === 'custom');
   const [customOd, setCustomOd] = useState(customRange?.od ?? '');
   const [customDo, setCustomDo] = useState(customRange?.do ?? '');
 
@@ -169,7 +170,7 @@ export default function StatusMeetingClient({
   }
 
   function applyCustomRange() {
-    if (!customOd || !customDo) return;
+    if (!customOd || !customDo || customOd > customDo) return;
     navigate({ okres: 'custom', od: customOd, do: customDo });
   }
 
@@ -197,22 +198,36 @@ export default function StatusMeetingClient({
       <div className={cardCls + ' py-4'}>
         <div className="flex flex-wrap gap-4 items-center">
           {/* Period tabs */}
-          <div className="flex items-center gap-1">
-            {PERIOD_OPTIONS.map((opt) => (
+          <div className="flex items-center gap-1 flex-wrap">
+            {PERIOD_OPTIONS.filter((opt) => opt.value !== 'custom').map((opt) => (
               <button
                 key={opt.value}
                 type="button"
-                onClick={() => navigate({ okres: opt.value })}
-                className={selectedPeriod === opt.value ? activeTabCls : inactiveTabCls}
+                onClick={() => {
+                  setCustomMode(false);
+                  navigate({ okres: opt.value });
+                }}
+                className={selectedPeriod === opt.value && !customMode ? activeTabCls : inactiveTabCls}
               >
                 {opt.label}
               </button>
             ))}
+            <button
+              type="button"
+              onClick={() => {
+                setCustomMode(true);
+                setCustomOd(customRange?.od ?? '');
+                setCustomDo(customRange?.do ?? '');
+              }}
+              className={customMode ? activeTabCls : inactiveTabCls}
+            >
+              Niestandardowy
+            </button>
           </div>
 
           {/* Custom date inputs */}
-          {selectedPeriod === 'custom' && (
-            <div className="flex items-center gap-2">
+          {customMode && (
+            <div className="flex items-center gap-2 flex-wrap">
               <span className="text-sm text-gray-500">Od</span>
               <input
                 type="date"
@@ -230,7 +245,7 @@ export default function StatusMeetingClient({
               <button
                 type="button"
                 onClick={applyCustomRange}
-                disabled={!customOd || !customDo}
+                disabled={!customOd || !customDo || customOd > customDo}
                 className="px-3 py-1.5 bg-[#FF5A3C] hover:bg-[#E64428] text-white text-sm font-medium rounded-md disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
                 Zastosuj
