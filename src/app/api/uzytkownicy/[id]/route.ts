@@ -8,6 +8,7 @@ type UserRow = {
   name: string;
   role: 'admin' | 'recruiter';
   is_active: boolean;
+  is_external: boolean;
   created_at: string;
   updated_at: string;
 };
@@ -39,7 +40,7 @@ export async function GET(_req: NextRequest, { params }: RouteContext) {
     }
 
     const rows = (await sql`
-      SELECT id, email, name, role, is_active, created_at, updated_at
+      SELECT id, email, name, role, is_active, is_external, created_at, updated_at
       FROM users WHERE id = ${id}
     `) as UserRow[];
 
@@ -96,6 +97,12 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
         { status: 400 }
       );
     }
+    if ('is_external' in body && typeof body.is_external !== 'boolean') {
+      return NextResponse.json(
+        { ok: false, error: 'is_external musi byc wartoscia logiczna' },
+        { status: 400 }
+      );
+    }
 
     // Fetch current user state
     const currentRows = (await sql`
@@ -147,16 +154,17 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
     if ('name' in body) { setClauses.push(`name = $${i++}`); values.push(body.name); }
     if ('role' in body) { setClauses.push(`role = $${i++}`); values.push(body.role); }
     if ('is_active' in body) { setClauses.push(`is_active = $${i++}`); values.push(body.is_active); }
+    if ('is_external' in body) { setClauses.push(`is_external = $${i++}`); values.push(body.is_external); }
 
     if (setClauses.length === 0) {
       const rows = (await sql`
-        SELECT id, email, name, role, is_active, created_at, updated_at FROM users WHERE id = ${id}
+        SELECT id, email, name, role, is_active, is_external, created_at, updated_at FROM users WHERE id = ${id}
       `) as UserRow[];
       return NextResponse.json({ ok: true, item: rows[0] });
     }
 
     values.push(id);
-    const queryStr = `UPDATE users SET ${setClauses.join(', ')} WHERE id = $${i} RETURNING id, email, name, role, is_active, created_at, updated_at`;
+    const queryStr = `UPDATE users SET ${setClauses.join(', ')} WHERE id = $${i} RETURNING id, email, name, role, is_active, is_external, created_at, updated_at`;
     const rows = (await sql.query(queryStr, values)) as UserRow[];
 
     if (!rows[0]) {

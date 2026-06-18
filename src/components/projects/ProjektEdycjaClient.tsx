@@ -3,8 +3,9 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import type { ProjectFull, ProjectStage } from '@/app/api/projekty/[id]/route';
+import type { ProjectFull, ProjectStage, FreelancerRates } from '@/app/api/projekty/[id]/route';
 import FunnelCard from '@/components/projects/FunnelCard';
+import FreelancerCandidatesSection from '@/components/projects/FreelancerCandidatesSection';
 import type { FunnelData } from '@/lib/funnel';
 
 type AvailableStatus = {
@@ -22,6 +23,9 @@ type Props = {
   currentUserId: string;
   availableStatuses: AvailableStatus[];
   availableUsers: { id: string; name: string }[];
+  availableFreelancers: { id: string; name: string }[];
+  initialFreelancerIds: string[];
+  initialFreelancerRates: FreelancerRates;
 };
 
 type Toast = { type: 'success' | 'error'; message: string };
@@ -53,11 +57,15 @@ export default function ProjektEdycjaClient({
   currentUserId,
   availableStatuses,
   availableUsers,
+  availableFreelancers,
+  initialFreelancerIds,
+  initialFreelancerRates,
 }: Props) {
   const router = useRouter();
 
   const [project, setProject] = useState<ProjectFull>(initialProject);
   const [stages, setStages] = useState<ProjectStage[]>(initialStages);
+  const [disableStages, setDisableStages] = useState(initialProject.disable_stages);
   const [notesDraft, setNotesDraft] = useState(initialProject.notes ?? '');
   const [linksDraft, setLinksDraft] = useState<LinkDraft[]>(initialProject.links ?? []);
   const [pointsDraft, setPointsDraft] = useState(initialProject.points);
@@ -66,6 +74,13 @@ export default function ProjektEdycjaClient({
   const [savingPoints, setSavingPoints] = useState(false);
   const [savingStatus, setSavingStatus] = useState(false);
   const [savingOwner, setSavingOwner] = useState(false);
+  const [savingFreelancers, setSavingFreelancers] = useState(false);
+  const [freelancerIds, setFreelancerIds] = useState<string[]>(initialFreelancerIds);
+  const [cvRate, setCvRate] = useState(initialFreelancerRates.cv_rate);
+  const [meetingRate, setMeetingRate] = useState(initialFreelancerRates.meeting_rate);
+  const [projectValue, setProjectValue] = useState<number | ''>(
+    initialFreelancerRates.project_value ?? ''
+  );
   const [savingStageId, setSavingStageId] = useState<string | null>(null);
   const [toast, setToast] = useState<Toast | null>(null);
 
@@ -217,7 +232,7 @@ export default function ProjektEdycjaClient({
   // ── Points handler ────────────────────────────────────────────────────────
 
   function handlePointsChange(val: number) {
-    setPointsDraft(Math.max(1, Math.min(25, val)));
+    setPointsDraft(Math.max(0, Math.min(25, val)));
   }
 
   async function handleSavePoints() {
@@ -303,6 +318,72 @@ export default function ProjektEdycjaClient({
       setSavingOwner(false);
     }
   }
+
+  // ── Disable stages handler ────────────────────────────────────────────────
+
+  async function handleDisableStages(value: boolean) {
+    setDisableStages(value);
+    try {
+      const res = await fetch(`/api/projekty/${project.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ disable_stages: value }),
+      });
+      const data = (await res.json()) as { ok: boolean; project?: ProjectFull; error?: string };
+      if (data.ok && data.project) {
+        setProject(data.project);
+        setDisableStages(data.project.disable_stages);
+      } else {
+        setDisableStages(!value);
+        showToast('error', data.error ?? 'Blad serwera');
+      }
+    } catch {
+      setDisableStages(!value);
+      showToast('error', 'Blad polaczenia z serwerem');
+    }
+  }
+
+  // ── Freelancers handler ───────────────────────────────────────────────────
+
+  function toggleFreelancer(id: string) {
+    setFreelancerIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    );
+  }
+
+  async function handleSaveFreelancers() {
+    setSavingFreelancers(true);
+    try {
+      const res = await fetch(`/api/projekty/${project.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          freelancer_ids: freelancerIds,
+          freelancer_rates: {
+            cv_rate: cvRate,
+            meeting_rate: meetingRate,
+            project_value: projectValue === '' ? null : projectValue,
+          },
+        }),
+      });
+      const data = (await res.json()) as { ok: boolean; project?: ProjectFull; error?: string };
+      if (data.ok) {
+        showToast('success', 'Zapisano freelancerów');
+      } else {
+        showToast('error', data.error ?? 'Blad serwera');
+      }
+    } catch {
+      showToast('error', 'Blad polaczenia z serwerem');
+    } finally {
+      setSavingFreelancers(false);
+    }
+  }
+
+  const freelancersChanged =
+    JSON.stringify([...freelancerIds].sort()) !== JSON.stringify([...initialFreelancerIds].sort()) ||
+    cvRate !== initialFreelancerRates.cv_rate ||
+    meetingRate !== initialFreelancerRates.meeting_rate ||
+    (projectValue === '' ? null : projectValue) !== initialFreelancerRates.project_value;
 
   // ── Close modal handlers ──────────────────────────────────────────────────
 
@@ -462,64 +543,71 @@ export default function ProjektEdycjaClient({
             )}
           </div>
         </div>
+        {project.points > 0 && (
+          <span className="shrink-0 text-sm font-bold text-[#FF5A3C] bg-[#FF5A3C]/10 px-3 py-1 rounded-full">
+            {project.points} pkt
+          </span>
+        )}
       </div>
 
       {/* Main grid */}
       <div className="grid lg:grid-cols-3 gap-6">
         {/* ── Left column: Stages ──────────────────────────────────────── */}
-        <div className="lg:col-span-2">
-          <div className={cardCls}>
-            <h2 className={h2Cls}>Etapy procesu</h2>
-            {stages.length === 0 ? (
-              <p className="text-sm text-gray-500">Brak etapow.</p>
-            ) : (
-              <div className="space-y-3">
-                {stages.map((stage) => (
-                  <div key={stage.id} className="flex items-center gap-3">
-                    <input
-                      type="checkbox"
-                      checked={stage.done_at !== null}
-                      disabled={savingStageId === stage.id}
-                      onChange={(e) => void handleStageToggle(stage, e.target.checked)}
-                      className="w-5 h-5 accent-[#FF5A3C] cursor-pointer shrink-0 disabled:cursor-not-allowed"
-                    />
-                    <div className="flex-1 min-w-0">
-                      <p
-                        className={`text-sm ${
-                          stage.done_at
-                            ? 'line-through text-gray-400'
-                            : 'font-medium text-gray-900'
-                        }`}
-                      >
-                        {stage.position}. {stage.name}
-                      </p>
-                      {stage.done_at && (
-                        <p className="text-xs text-gray-500 mt-0.5">
-                          Wykonano: {formatDatePL(stage.done_at)}
+        {!disableStages && (
+          <div className="lg:col-span-2">
+            <div className={cardCls}>
+              <h2 className={h2Cls}>Etapy procesu</h2>
+              {stages.length === 0 ? (
+                <p className="text-sm text-gray-500">Brak etapow.</p>
+              ) : (
+                <div className="space-y-3">
+                  {stages.map((stage) => (
+                    <div key={stage.id} className="flex items-center gap-3">
+                      <input
+                        type="checkbox"
+                        checked={stage.done_at !== null}
+                        disabled={savingStageId === stage.id}
+                        onChange={(e) => void handleStageToggle(stage, e.target.checked)}
+                        className="w-5 h-5 accent-[#FF5A3C] cursor-pointer shrink-0 disabled:cursor-not-allowed"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <p
+                          className={`text-sm ${
+                            stage.done_at
+                              ? 'line-through text-gray-400'
+                              : 'font-medium text-gray-900'
+                          }`}
+                        >
+                          {stage.position}. {stage.name}
                         </p>
-                      )}
+                        {stage.done_at && (
+                          <p className="text-xs text-gray-500 mt-0.5">
+                            Wykonano: {formatDatePL(stage.done_at)}
+                          </p>
+                        )}
+                      </div>
+                      <input
+                        key={stage.deadline}
+                        type="date"
+                        defaultValue={stage.deadline}
+                        disabled={stage.done_at !== null || savingStageId === stage.id}
+                        onBlur={(e) => void handleStageDeadlineBlur(stage, e.target.value)}
+                        className={`px-2 py-1 border rounded text-sm w-36 focus:outline-none focus:ring-2 focus:ring-[#FF5A3C] focus:border-transparent disabled:bg-gray-50 disabled:text-gray-400 disabled:cursor-not-allowed ${
+                          isOverdue(stage)
+                            ? 'text-red-600 font-medium border-red-300'
+                            : 'text-gray-700 border-gray-300'
+                        }`}
+                      />
                     </div>
-                    <input
-                      key={stage.deadline}
-                      type="date"
-                      defaultValue={stage.deadline}
-                      disabled={stage.done_at !== null || savingStageId === stage.id}
-                      onBlur={(e) => void handleStageDeadlineBlur(stage, e.target.value)}
-                      className={`px-2 py-1 border rounded text-sm w-36 focus:outline-none focus:ring-2 focus:ring-[#FF5A3C] focus:border-transparent disabled:bg-gray-50 disabled:text-gray-400 disabled:cursor-not-allowed ${
-                        isOverdue(stage)
-                          ? 'text-red-600 font-medium border-red-300'
-                          : 'text-gray-700 border-gray-300'
-                      }`}
-                    />
-                  </div>
-                ))}
-              </div>
-            )}
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
-        </div>
+        )}
 
         {/* ── Right column ─────────────────────────────────────────────── */}
-        <div className="space-y-6">
+        <div className={`space-y-6 ${disableStages ? 'lg:col-span-3' : ''}`}>
           {/* Card 1: Metadane */}
           <div className={cardCls}>
             <h2 className={h2Cls}>Metadane</h2>
@@ -614,7 +702,7 @@ export default function ProjektEdycjaClient({
                 </button>
                 <input
                   type="number"
-                  min={1}
+                  min={0}
                   max={25}
                   step={1}
                   value={pointsDraft}
@@ -644,6 +732,19 @@ export default function ProjektEdycjaClient({
               {currentUserRole !== 'admin' && (
                 <p className="text-xs text-gray-500 mt-1">Tylko admin moze zmieniac punkty</p>
               )}
+            </div>
+
+            {/* disable_stages */}
+            <div className="border-t border-gray-200 pt-4 mt-4">
+              <label className="flex items-center gap-2 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={disableStages}
+                  onChange={(e) => void handleDisableStages(e.target.checked)}
+                  className="w-4 h-4 accent-[#FF5A3C]"
+                />
+                <span className="text-sm text-gray-700">Wylacz etapy projektu</span>
+              </label>
             </div>
           </div>
 
@@ -729,7 +830,87 @@ export default function ProjektEdycjaClient({
             )}
           </div>
 
-          {/* Card 4: Akcje */}
+          {/* Card 4: Freelancerzy */}
+          {availableFreelancers.length > 0 && (
+            <div className={cardCls}>
+              <h2 className={h2Cls}>Freelancerzy</h2>
+
+              <div className="grid grid-cols-3 gap-3 mb-5">
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">
+                    Stawka za CV
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    step={1}
+                    value={cvRate}
+                    onChange={(e) => setCvRate(Math.max(0, Math.floor(Number(e.target.value))))}
+                    className="w-full px-2 py-1.5 border border-gray-300 rounded-md text-sm text-center focus:outline-none focus:ring-2 focus:ring-[#FF5A3C] focus:border-transparent"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">
+                    Stawka za spotkanie
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    step={1}
+                    value={meetingRate}
+                    onChange={(e) => setMeetingRate(Math.max(0, Math.floor(Number(e.target.value))))}
+                    className="w-full px-2 py-1.5 border border-gray-300 rounded-md text-sm text-center focus:outline-none focus:ring-2 focus:ring-[#FF5A3C] focus:border-transparent"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">
+                    Wartosc projektu
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    step={1}
+                    placeholder={`= ${project.points} pkt`}
+                    value={projectValue}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setProjectValue(v === '' ? '' : Math.max(0, Math.floor(Number(v))));
+                    }}
+                    className="w-full px-2 py-1.5 border border-gray-300 rounded-md text-sm text-center focus:outline-none focus:ring-2 focus:ring-[#FF5A3C] focus:border-transparent"
+                  />
+                  <p className="text-xs text-gray-400 mt-0.5 text-center">puste = punkty projektu</p>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                {availableFreelancers.map((f) => (
+                  <label key={f.id} className="flex items-center gap-2 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={freelancerIds.includes(f.id)}
+                      onChange={() => toggleFreelancer(f.id)}
+                      className="w-4 h-4 accent-[#FF5A3C]"
+                    />
+                    <span className="text-sm text-gray-800">{f.name}</span>
+                  </label>
+                ))}
+              </div>
+              {freelancersChanged && (
+                <div className="mt-3 flex justify-end">
+                  <button
+                    type="button"
+                    onClick={() => void handleSaveFreelancers()}
+                    disabled={savingFreelancers}
+                    className={btnPrimary}
+                  >
+                    {savingFreelancers ? 'Zapisywanie...' : 'Zapisz freelancerów'}
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Card 5: Akcje */}
           <div className={cardCls}>
             <h2 className={h2Cls}>Akcje</h2>
             {project.is_archived ? (
@@ -752,6 +933,21 @@ export default function ProjektEdycjaClient({
           </div>
         </div>
       </div>
+
+      {/* Freelancer Candidates — admin view */}
+      {availableFreelancers.length > 0 && (
+        <div className="mt-6">
+          <FreelancerCandidatesSection
+            projectId={project.id}
+            freelancerRates={{
+              cv_rate: cvRate,
+              meeting_rate: meetingRate,
+              project_value: projectValue === '' ? null : projectValue,
+            }}
+            projectPoints={project.points}
+          />
+        </div>
+      )}
 
       {/* Funnel */}
       <div className="mt-6">

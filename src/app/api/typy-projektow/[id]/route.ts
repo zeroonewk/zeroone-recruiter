@@ -72,9 +72,9 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
 
     if ('default_points' in body) {
       const rawPoints = Number(body.default_points);
-      if (!Number.isInteger(rawPoints) || rawPoints < 1 || rawPoints > 25) {
+      if (!Number.isInteger(rawPoints) || rawPoints < 0 || rawPoints > 25) {
         return NextResponse.json(
-          { ok: false, error: 'Domyslne punkty musza byc liczba calkowita od 1 do 25' },
+          { ok: false, error: 'Domyslne punkty musza byc liczba calkowita od 0 do 25' },
           { status: 400 }
         );
       }

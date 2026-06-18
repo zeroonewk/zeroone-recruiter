@@ -46,9 +46,9 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
-    if (!Number.isInteger(rawPoints) || rawPoints < 1 || rawPoints > 25) {
+    if (!Number.isInteger(rawPoints) || rawPoints < 0 || rawPoints > 25) {
       return NextResponse.json(
-        { ok: false, error: 'Domyslne punkty musza byc liczba calkowita od 1 do 25' },
+        { ok: false, error: 'Domyslne punkty musza byc liczba calkowita od 0 do 25' },
         { status: 400 }
       );
     }

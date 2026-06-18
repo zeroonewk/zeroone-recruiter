@@ -163,9 +163,9 @@ export async function POST(request: NextRequest) {
     const status_id = body.status_id as string;
 
     const points = Number(body.points);
-    if (!Number.isInteger(points) || points < 1 || points > 25) {
+    if (!Number.isInteger(points) || points < 0 || points > 25) {
       return NextResponse.json(
-        { ok: false, error: 'Punkty musza byc liczba calkowita od 1 do 25' },
+        { ok: false, error: 'Punkty musza byc liczba calkowita od 0 do 25' },
         { status: 400 }
       );
     }
@@ -214,8 +214,44 @@ export async function POST(request: NextRequest) {
       links.push({ label, url });
     }
 
+    const rawFreelancerIds = Array.isArray(body.freelancer_ids) ? body.freelancer_ids : [];
+    const freelancerIds: string[] = [];
+    for (const fid of rawFreelancerIds) {
+      if (typeof fid !== 'string' || !UUID_RE.test(fid)) {
+        return NextResponse.json(
+          { ok: false, error: 'Nieprawidlowe UUID w freelancer_ids' },
+          { status: 400 }
+        );
+      }
+      freelancerIds.push(fid);
+    }
+
+    const rawRates = body.freelancer_rates;
+    let freelancerRates = { cv_rate: 1, meeting_rate: 5, project_value: null as number | null };
+    if (rawRates != null) {
+      if (typeof rawRates !== 'object' || Array.isArray(rawRates)) {
+        return NextResponse.json({ ok: false, error: 'Nieprawidlowe freelancer_rates' }, { status: 400 });
+      }
+      const r = rawRates as Record<string, unknown>;
+      const cv_rate = Number(r.cv_rate);
+      const meeting_rate = Number(r.meeting_rate);
+      if (!Number.isInteger(cv_rate) || cv_rate < 0) {
+        return NextResponse.json({ ok: false, error: 'cv_rate musi byc nieujemna liczba calkowita' }, { status: 400 });
+      }
+      if (!Number.isInteger(meeting_rate) || meeting_rate < 0) {
+        return NextResponse.json({ ok: false, error: 'meeting_rate musi byc nieujemna liczba calkowita' }, { status: 400 });
+      }
+      const project_value = r.project_value == null ? null : Number(r.project_value);
+      if (project_value !== null && (!Number.isInteger(project_value) || project_value < 0)) {
+        return NextResponse.json({ ok: false, error: 'project_value musi byc nieujemna liczba calkowita lub null' }, { status: 400 });
+      }
+      freelancerRates = { cv_rate, meeting_rate, project_value };
+    }
+
+    const rawDisableStages = Boolean(body.disable_stages);
+
     const rawStages = Array.isArray(body.stages) ? body.stages : [];
-    if (rawStages.length === 0) {
+    if (!rawDisableStages && rawStages.length === 0) {
       return NextResponse.json(
         { ok: false, error: 'Projekt musi miec przynajmniej jeden etap' },
         { status: 400 }
@@ -249,7 +285,7 @@ export async function POST(request: NextRequest) {
 
     // ── Insert project ─────────────────────────────────────────────────────
     const projRows = (await sql`
-      INSERT INTO projects (title, client_id, project_type_id, owner_id, status_id, points, links, notes, opened_at)
+      INSERT INTO projects (title, client_id, project_type_id, owner_id, status_id, points, links, notes, opened_at, freelancer_rates, disable_stages)
       VALUES (
         ${title},
         ${client_id}::uuid,
@@ -259,7 +295,9 @@ export async function POST(request: NextRequest) {
         ${points},
         ${JSON.stringify(links)}::jsonb,
         ${notes},
-        ${opened_at}::date
+        ${opened_at}::date,
+        ${JSON.stringify(freelancerRates)}::jsonb,
+        ${rawDisableStages}
       )
       RETURNING id, title, client_id, project_type_id, owner_id, status_id, points, links, notes, opened_at, closed_at, is_archived, created_at, updated_at
     `) as ProjectRow[];
@@ -284,6 +322,14 @@ export async function POST(request: NextRequest) {
       INSERT INTO project_point_allocations (project_id, user_id, points)
       VALUES (${projectId}::uuid, ${owner_id}::uuid, ${points})
     `;
+
+    // ── Insert freelancer assignments ──────────────────────────────────────
+    if (freelancerIds.length > 0) {
+      await sql`
+        INSERT INTO project_freelancers (project_id, user_id)
+        SELECT ${projectId}::uuid, unnest(${freelancerIds}::uuid[])
+      `;
+    }
 
     return NextResponse.json({ ok: true, project_id: project.id }, { status: 201 });
   } catch (e) {

@@ -8,6 +8,12 @@ const URL_RE = /^https?:\/\//;
 
 type LinkInput = { label: string; url: string };
 
+export type FreelancerRates = {
+  cv_rate: number;
+  meeting_rate: number;
+  project_value: number | null;
+};
+
 export type ProjectFull = {
   id: string;
   title: string;
@@ -17,7 +23,9 @@ export type ProjectFull = {
   opened_at: string;
   closed_at: string | null;
   is_archived: boolean;
+  disable_stages: boolean;
   funnel: FunnelData;
+  freelancer_rates: FreelancerRates;
   client_id: string;
   client_name: string;
   type_id: string;
@@ -31,6 +39,18 @@ export type ProjectFull = {
   status_is_success: boolean;
 };
 
+function normalizeFreelancerRates(raw: unknown): FreelancerRates {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    return { cv_rate: 1, meeting_rate: 5, project_value: null };
+  }
+  const r = raw as Record<string, unknown>;
+  return {
+    cv_rate: typeof r.cv_rate === 'number' ? r.cv_rate : 1,
+    meeting_rate: typeof r.meeting_rate === 'number' ? r.meeting_rate : 5,
+    project_value: typeof r.project_value === 'number' ? r.project_value : null,
+  };
+}
+
 export type ProjectStage = {
   id: string;
   name: string;
@@ -42,13 +62,13 @@ export type ProjectStage = {
 
 type RouteContext = { params: Promise<{ id: string }> };
 
-type ProjectFullRaw = Omit<ProjectFull, 'funnel'> & { funnel: unknown };
+type ProjectFullRaw = Omit<ProjectFull, 'funnel' | 'freelancer_rates'> & { funnel: unknown; freelancer_rates: unknown; disable_stages: boolean };
 
 async function fetchProjectFull(id: string): Promise<ProjectFull | null> {
   const rows = (await sql`
     SELECT
       p.id, p.title, p.points, p.notes, p.links, p.opened_at, p.closed_at, p.is_archived,
-      p.funnel,
+      p.disable_stages, p.funnel, p.freelancer_rates,
       c.id AS client_id, c.name AS client_name,
       pt.id AS type_id, pt.name AS type_name,
       u.id AS owner_id, u.name AS owner_name, u.email AS owner_email,
@@ -63,7 +83,11 @@ async function fetchProjectFull(id: string): Promise<ProjectFull | null> {
     LIMIT 1
   `) as ProjectFullRaw[];
   if (!rows[0]) return null;
-  return { ...rows[0], funnel: normalizeFunnel(rows[0].funnel) };
+  return {
+    ...rows[0],
+    funnel: normalizeFunnel(rows[0].funnel),
+    freelancer_rates: normalizeFreelancerRates(rows[0].freelancer_rates),
+  };
 }
 
 export async function GET(_req: NextRequest, { params }: RouteContext) {
@@ -116,6 +140,18 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
     const values: unknown[] = [];
     let i = 1;
     let pendingNewOwnerId: string | null = null;
+    let pendingFreelancerIds: string[] | null = null;
+
+    if ('freelancer_ids' in body) {
+      const raw = body.freelancer_ids;
+      if (!Array.isArray(raw)) {
+        return NextResponse.json({ ok: false, error: 'freelancer_ids musi byc tablica' }, { status: 400 });
+      }
+      if (raw.some((v) => typeof v !== 'string' || !UUID_RE.test(v))) {
+        return NextResponse.json({ ok: false, error: 'Nieprawidlowe UUID w freelancer_ids' }, { status: 400 });
+      }
+      pendingFreelancerIds = raw as string[];
+    }
 
     if ('title' in body) {
       const title = typeof body.title === 'string' ? body.title.trim() : '';
@@ -154,9 +190,9 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
         );
       }
       const points = Number(body.points);
-      if (!Number.isInteger(points) || points < 1 || points > 25) {
+      if (!Number.isInteger(points) || points < 0 || points > 25) {
         return NextResponse.json(
-          { ok: false, error: 'Punkty musza byc liczba calkowita od 1 do 25' },
+          { ok: false, error: 'Punkty musza byc liczba calkowita od 0 do 25' },
           { status: 400 }
         );
       }
@@ -305,33 +341,75 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
       pendingNewOwnerId = newOwnerId;
     }
 
-    if (setClauses.length === 0) {
+    if ('freelancer_rates' in body) {
+      const raw = body.freelancer_rates;
+      if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+        return NextResponse.json({ ok: false, error: 'Nieprawidlowe freelancer_rates' }, { status: 400 });
+      }
+      const r = raw as Record<string, unknown>;
+      const cv_rate = Number(r.cv_rate);
+      const meeting_rate = Number(r.meeting_rate);
+      if (!Number.isInteger(cv_rate) || cv_rate < 0) {
+        return NextResponse.json({ ok: false, error: 'cv_rate musi byc nieujemna liczba calkowita' }, { status: 400 });
+      }
+      if (!Number.isInteger(meeting_rate) || meeting_rate < 0) {
+        return NextResponse.json({ ok: false, error: 'meeting_rate musi byc nieujemna liczba calkowita' }, { status: 400 });
+      }
+      const project_value = r.project_value == null ? null : Number(r.project_value);
+      if (project_value !== null && (!Number.isInteger(project_value) || project_value < 0)) {
+        return NextResponse.json({ ok: false, error: 'project_value musi byc nieujemna liczba calkowita lub null' }, { status: 400 });
+      }
+      setClauses.push(`freelancer_rates = $${i++}::jsonb`);
+      values.push(JSON.stringify({ cv_rate, meeting_rate, project_value }));
+    }
+
+    if ('disable_stages' in body) {
+      setClauses.push(`disable_stages = $${i++}`);
+      values.push(Boolean(body.disable_stages));
+    }
+
+    if (setClauses.length === 0 && pendingFreelancerIds === null) {
       return NextResponse.json({ ok: false, error: 'Brak pol do aktualizacji' }, { status: 400 });
     }
 
-    values.push(id);
-    const queryStr = `
-      UPDATE projects
-      SET ${setClauses.join(', ')}, updated_at = NOW()
-      WHERE id = $${i}::uuid
-      RETURNING id
-    `;
-    const updated = (await sql.query(queryStr, values)) as { id: string }[];
+    if (setClauses.length > 0) {
+      values.push(id);
+      const queryStr = `
+        UPDATE projects
+        SET ${setClauses.join(', ')}, updated_at = NOW()
+        WHERE id = $${i}::uuid
+        RETURNING id
+      `;
+      const updated = (await sql.query(queryStr, values)) as { id: string }[];
 
-    if (!updated || updated.length === 0) {
-      return NextResponse.json({ ok: false, error: 'Projekt nie istnieje' }, { status: 404 });
+      if (!updated || updated.length === 0) {
+        return NextResponse.json({ ok: false, error: 'Projekt nie istnieje' }, { status: 404 });
+      }
+
+      if (pendingNewOwnerId !== null) {
+        const oid = pendingNewOwnerId;
+        await sql`DELETE FROM project_point_allocations WHERE project_id = ${id}::uuid`;
+        await sql`
+          INSERT INTO project_point_allocations (project_id, user_id, points)
+          VALUES (${id}::uuid, ${oid}::uuid, (SELECT points FROM projects WHERE id = ${id}::uuid))
+        `;
+      }
     }
 
-    if (pendingNewOwnerId !== null) {
-      const oid = pendingNewOwnerId;
-      await sql`DELETE FROM project_point_allocations WHERE project_id = ${id}::uuid`;
-      await sql`
-        INSERT INTO project_point_allocations (project_id, user_id, points)
-        VALUES (${id}::uuid, ${oid}::uuid, (SELECT points FROM projects WHERE id = ${id}::uuid))
-      `;
+    if (pendingFreelancerIds !== null) {
+      await sql`DELETE FROM project_freelancers WHERE project_id = ${id}::uuid`;
+      if (pendingFreelancerIds.length > 0) {
+        await sql`
+          INSERT INTO project_freelancers (project_id, user_id)
+          SELECT ${id}::uuid, unnest(${pendingFreelancerIds}::uuid[])
+        `;
+      }
     }
 
     const project = await fetchProjectFull(id);
+    if (!project) {
+      return NextResponse.json({ ok: false, error: 'Projekt nie istnieje' }, { status: 404 });
+    }
     return NextResponse.json({ ok: true, project });
   } catch (e) {
     if (e instanceof Error && e.message === 'UNAUTHORIZED') {

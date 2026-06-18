@@ -8,6 +8,7 @@ type UserRow = {
   name: string;
   role: 'admin' | 'recruiter';
   is_active: boolean;
+  is_external: boolean;
   created_at: string;
   updated_at: string;
 };
@@ -28,7 +29,7 @@ export async function GET() {
     }
 
     const rows = (await sql`
-      SELECT id, email, name, role, is_active, created_at, updated_at
+      SELECT id, email, name, role, is_active, is_external, created_at, updated_at
       FROM users
       ORDER BY name ASC
     `) as UserRow[];
@@ -54,6 +55,7 @@ export async function POST(request: NextRequest) {
     const rawName = typeof body?.name === 'string' ? body.name.trim() : '';
     const rawRole = typeof body?.role === 'string' ? body.role : '';
     const rawPassword = typeof body?.password === 'string' ? body.password : '';
+    const rawIsExternal = typeof body?.is_external === 'boolean' ? body.is_external : false;
 
     if (!EMAIL_RE.test(rawEmail)) {
       return NextResponse.json({ ok: false, error: 'Nieprawidlowy email' }, { status: 400 });
@@ -77,9 +79,9 @@ export async function POST(request: NextRequest) {
     const hash = await hashPassword(rawPassword);
 
     const rows = (await sql`
-      INSERT INTO users (email, name, role, password_hash)
-      VALUES (${rawEmail}, ${rawName}, ${rawRole}, ${hash})
-      RETURNING id, email, name, role, is_active, created_at, updated_at
+      INSERT INTO users (email, name, role, password_hash, is_external)
+      VALUES (${rawEmail}, ${rawName}, ${rawRole}, ${hash}, ${rawIsExternal})
+      RETURNING id, email, name, role, is_active, is_external, created_at, updated_at
     `) as UserRow[];
 
     return NextResponse.json({ ok: true, item: rows[0] }, { status: 201 });

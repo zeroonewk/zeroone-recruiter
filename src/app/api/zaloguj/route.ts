@@ -8,6 +8,7 @@ type UserRow = {
   role: 'admin' | 'recruiter';
   password_hash: string;
   is_active: boolean;
+  is_external: boolean;
 };
 
 export async function POST(request: Request) {
@@ -24,7 +25,7 @@ export async function POST(request: Request) {
     }
 
     const rows = (await sql`
-      SELECT id, email, name, role, password_hash, is_active
+      SELECT id, email, name, role, password_hash, is_active, is_external
       FROM users
       WHERE LOWER(email) = LOWER(${email})
       LIMIT 1
@@ -58,6 +59,7 @@ export async function POST(request: Request) {
       email: user.email,
       name: user.name,
       role: user.role,
+      is_external: user.is_external,
     });
     await setSessionCookie(token);
 

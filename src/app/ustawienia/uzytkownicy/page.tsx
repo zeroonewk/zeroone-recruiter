@@ -8,7 +8,7 @@ export default async function UzytkownicyPage() {
   if (session?.role !== 'admin') redirect('/ustawienia/klienci');
 
   const items = (await sql`
-    SELECT id, email, name, role, is_active, created_at, updated_at
+    SELECT id, email, name, role, is_active, is_external, created_at, updated_at
     FROM users
     ORDER BY name ASC
   `) as User[];

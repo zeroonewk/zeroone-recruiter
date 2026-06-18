@@ -7,6 +7,7 @@ export type SessionPayload = {
   email: string;
   name: string;
   role: 'admin' | 'recruiter';
+  is_external: boolean;
 };
 
 const COOKIE_NAME = 'zo_recruiter_session';
@@ -32,6 +33,7 @@ export async function signSession(payload: SessionPayload): Promise<string> {
     email: payload.email,
     name: payload.name,
     role: payload.role,
+    is_external: payload.is_external,
   })
     .setProtectedHeader({ alg: 'HS256' })
     .setExpirationTime('30d')
@@ -44,6 +46,7 @@ export async function verifySession(token: string): Promise<SessionPayload | nul
       email: string;
       name: string;
       role: 'admin' | 'recruiter';
+      is_external?: boolean;
     }>(token, getSecret());
 
     if (
@@ -60,6 +63,7 @@ export async function verifySession(token: string): Promise<SessionPayload | nul
       email: payload.email,
       name: payload.name,
       role: payload.role,
+      is_external: payload.is_external ?? false,
     };
   } catch {
     return null;

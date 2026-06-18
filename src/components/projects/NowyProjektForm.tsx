@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 
@@ -78,8 +78,23 @@ export default function NowyProjektForm({ initData, currentUserId }: Props) {
       touched: false,
     }))
   );
+  const [freelancerIds, setFreelancerIds] = useState<string[]>([]);
+  const [availableFreelancers, setAvailableFreelancers] = useState<{ id: string; name: string }[]>([]);
+  const [cvRate, setCvRate] = useState(1);
+  const [meetingRate, setMeetingRate] = useState(5);
+  const [projectValue, setProjectValue] = useState<number | ''>('');
+  const [disableStages, setDisableStages] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    fetch('/api/freelancers')
+      .then((r) => r.json())
+      .then((data: { ok: boolean; items?: { id: string; name: string }[] }) => {
+        if (data.ok && data.items) setAvailableFreelancers(data.items);
+      })
+      .catch(() => {});
+  }, []);
 
   // ── Smart recalc ────────────────────────────────────────────────────────
 
@@ -105,7 +120,7 @@ export default function NowyProjektForm({ initData, currentUserId }: Props) {
   }
 
   function handlePointsChange(val: number) {
-    const clamped = Math.max(1, Math.min(25, val));
+    const clamped = Math.max(0, Math.min(25, val));
     setPoints(clamped);
     setUserTouchedPoints(true);
   }
@@ -113,6 +128,14 @@ export default function NowyProjektForm({ initData, currentUserId }: Props) {
   function handleStageDeadlineChange(position: number, value: string) {
     setStages((prev) =>
       prev.map((s) => (s.position === position ? { ...s, deadline: value, touched: true } : s))
+    );
+  }
+
+  // ── Freelancers ─────────────────────────────────────────────────────────
+
+  function toggleFreelancer(id: string) {
+    setFreelancerIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
     );
   }
 
@@ -140,10 +163,10 @@ export default function NowyProjektForm({ initData, currentUserId }: Props) {
     ownerId !== '' &&
     statusId !== '' &&
     Number.isInteger(points) &&
-    points >= 1 &&
+    points >= 0 &&
     points <= 25 &&
     DATE_RE.test(openedAt) &&
-    stages.every((s) => DATE_RE.test(s.deadline)) &&
+    (disableStages || stages.every((s) => DATE_RE.test(s.deadline))) &&
     links.every((l) => l.label.trim().length > 0 && URL_RE.test(l.url.trim()));
 
   // ── Submit ──────────────────────────────────────────────────────────────
@@ -166,11 +189,18 @@ export default function NowyProjektForm({ initData, currentUserId }: Props) {
           opened_at: openedAt,
           notes: notes.trim() || null,
           links: links.map((l) => ({ label: l.label.trim(), url: l.url.trim() })),
-          stages: stages.map((s) => ({
+          stages: disableStages ? [] : stages.map((s) => ({
             name: s.name,
             position: s.position,
             deadline: s.deadline,
           })),
+          disable_stages: disableStages,
+          freelancer_ids: freelancerIds,
+          freelancer_rates: {
+            cv_rate: cvRate,
+            meeting_rate: meetingRate,
+            project_value: projectValue === '' ? null : projectValue,
+          },
         }),
       });
       const data = (await res.json()) as { ok: boolean; error?: string };
@@ -334,7 +364,7 @@ export default function NowyProjektForm({ initData, currentUserId }: Props) {
                   <input
                     id="f-points"
                     type="number"
-                    min={1}
+                    min={0}
                     max={25}
                     step={1}
                     required
@@ -351,7 +381,7 @@ export default function NowyProjektForm({ initData, currentUserId }: Props) {
                   >
                     +
                   </button>
-                  <span className="text-xs text-gray-500 ml-1">1–25</span>
+                  <span className="text-xs text-gray-500 ml-1">0–25</span>
                 </div>
               </div>
             </div>
@@ -359,28 +389,43 @@ export default function NowyProjektForm({ initData, currentUserId }: Props) {
 
           {/* ── Etapy procesu ──────────────────────────────────────── */}
           <div className={sectionCls}>
-            <h2 className="text-base font-semibold text-gray-900 mb-1">Etapy procesu</h2>
-            <p className="text-sm text-gray-500 mb-4">
-              Ustaw deadline dla kazdego etapu. Po zmianie daty otwarcia, deadliny nie ruszone
-              recznie zostana przeliczone.
-            </p>
-            <div className="space-y-3">
-              {stages.map((s) => (
-                <div key={s.position} className="flex items-center gap-3">
-                  <span className="text-sm text-gray-500 w-5 text-right shrink-0">
-                    {s.position}.
-                  </span>
-                  <span className="text-sm font-medium text-gray-900 flex-1">{s.name}</span>
-                  <input
-                    type="date"
-                    required
-                    value={s.deadline}
-                    onChange={(e) => handleStageDeadlineChange(s.position, e.target.value)}
-                    className="px-3 py-1.5 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-[#FF5A3C] focus:border-transparent"
-                  />
-                </div>
-              ))}
+            <div className="flex items-center justify-between mb-1">
+              <h2 className="text-base font-semibold text-gray-900">Etapy procesu</h2>
+              <label className="flex items-center gap-2 cursor-pointer select-none text-sm text-gray-600">
+                <input
+                  type="checkbox"
+                  checked={disableStages}
+                  onChange={(e) => setDisableStages(e.target.checked)}
+                  className="w-4 h-4 accent-[#FF5A3C]"
+                />
+                Wylacz etapy
+              </label>
             </div>
+            {!disableStages && (
+              <>
+                <p className="text-sm text-gray-500 mb-4">
+                  Ustaw deadline dla kazdego etapu. Po zmianie daty otwarcia, deadliny nie ruszone
+                  recznie zostana przeliczone.
+                </p>
+                <div className="space-y-3">
+                  {stages.map((s) => (
+                    <div key={s.position} className="flex items-center gap-3">
+                      <span className="text-sm text-gray-500 w-5 text-right shrink-0">
+                        {s.position}.
+                      </span>
+                      <span className="text-sm font-medium text-gray-900 flex-1">{s.name}</span>
+                      <input
+                        type="date"
+                        required
+                        value={s.deadline}
+                        onChange={(e) => handleStageDeadlineChange(s.position, e.target.value)}
+                        className="px-3 py-1.5 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-[#FF5A3C] focus:border-transparent"
+                      />
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
           </div>
 
           {/* ── Notatki ────────────────────────────────────────────── */}
@@ -441,6 +486,74 @@ export default function NowyProjektForm({ initData, currentUserId }: Props) {
               </div>
             )}
           </div>
+          {/* ── Freelancerzy ───────────────────────────────────────── */}
+          {availableFreelancers.length > 0 && (
+            <div className={sectionCls}>
+              <h2 className="text-base font-semibold text-gray-900 mb-3">Freelancerzy</h2>
+
+              <div className="grid sm:grid-cols-3 gap-4 mb-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Stawka za CV
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    step={1}
+                    value={cvRate}
+                    onChange={(e) => setCvRate(Math.max(0, Math.floor(Number(e.target.value))))}
+                    className={inputCls + ' text-center'}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Stawka za spotkanie
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    step={1}
+                    value={meetingRate}
+                    onChange={(e) => setMeetingRate(Math.max(0, Math.floor(Number(e.target.value))))}
+                    className={inputCls + ' text-center'}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Wartosc projektu dla freelancera{' '}
+                    <span className="text-gray-400 font-normal">(opcjonalne)</span>
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    step={1}
+                    placeholder={points ? `${points} pkt` : 'puste = punkty projektu'}
+                    value={projectValue}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setProjectValue(v === '' ? '' : Math.max(0, Math.floor(Number(v))));
+                    }}
+                    className={inputCls + ' text-center'}
+                  />
+                </div>
+              </div>
+
+              <p className="text-sm font-medium text-gray-700 mb-2">Przypisani freelancerzy</p>
+              <div className="space-y-2">
+                {availableFreelancers.map((f) => (
+                  <label key={f.id} className="flex items-center gap-2 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={freelancerIds.includes(f.id)}
+                      onChange={() => toggleFreelancer(f.id)}
+                      className="w-4 h-4 accent-[#FF5A3C]"
+                    />
+                    <span className="text-sm text-gray-800">{f.name}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* ── Footer ─────────────────────────────────────────────────── */}

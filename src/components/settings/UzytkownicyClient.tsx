@@ -8,6 +8,7 @@ export type User = {
   name: string;
   role: 'admin' | 'recruiter';
   is_active: boolean;
+  is_external: boolean;
   created_at: string;
   updated_at: string;
 };
@@ -29,6 +30,7 @@ function UserModal({ user, currentUserId, onClose, onSaved }: UserModalProps) {
   const [email, setEmail] = useState(user?.email ?? '');
   const [name, setName] = useState(user?.name ?? '');
   const [role, setRole] = useState<'admin' | 'recruiter'>(user?.role ?? 'recruiter');
+  const [isExternal, setIsExternal] = useState(user?.is_external ?? false);
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState('');
@@ -57,6 +59,7 @@ function UserModal({ user, currentUserId, onClose, onSaved }: UserModalProps) {
         email: email.trim().toLowerCase(),
         name: name.trim(),
         role,
+        is_external: isExternal,
       };
       if (!isEdit) payload.password = password;
 
@@ -131,6 +134,20 @@ function UserModal({ user, currentUserId, onClose, onSaved }: UserModalProps) {
             {isSelf && (
               <p className="mt-1 text-xs text-gray-500">Nie mozesz zmienic wlasnej roli.</p>
             )}
+          </div>
+
+          <div className="mb-4">
+            <label className="flex items-center gap-2 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={isExternal}
+                onChange={(e) => setIsExternal(e.target.checked)}
+                className="w-4 h-4 accent-[#FF5A3C]"
+              />
+              <span className="text-sm text-gray-700">
+                Freelancer (zewnetrzny wspolpracownik)
+              </span>
+            </label>
           </div>
 
           {!isEdit && (
@@ -463,6 +480,11 @@ export default function UzytkownicyClient({ initialItems, currentUserId }: Props
                       </span>
                       {isSelf && (
                         <span className="ml-2 text-xs text-gray-400">(to Ty)</span>
+                      )}
+                      {user.is_external && (
+                        <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-blue-50 text-blue-700">
+                          Freelancer
+                        </span>
                       )}
                     </td>
                     <td className={`px-4 py-3 text-sm${!user.is_active ? ' text-gray-400' : ' text-gray-600'}`}>

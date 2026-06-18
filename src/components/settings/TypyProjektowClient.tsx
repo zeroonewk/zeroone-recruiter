@@ -36,7 +36,7 @@ function TypProjektuModal({ item, onClose, onSaved }: ModalProps) {
     loading ||
     name.trim().length < 2 ||
     !Number.isInteger(pointsNum) ||
-    pointsNum < 1 ||
+    pointsNum < 0 ||
     pointsNum > 25;
 
   async function handleSubmit(e: React.FormEvent) {
@@ -102,7 +102,7 @@ function TypProjektuModal({ item, onClose, onSaved }: ModalProps) {
             <input
               id="modal-points"
               type="number"
-              min={1}
+              min={0}
               max={25}
               step={1}
               required
@@ -111,7 +111,7 @@ function TypProjektuModal({ item, onClose, onSaved }: ModalProps) {
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#FF5A3C] focus:border-transparent"
             />
             <p className="mt-1 text-xs text-gray-500">
-              Sugerowana liczba punktow dla projektow tego typu (1-25). Przy zakladaniu projektu mozna zmienic.
+              Sugerowana liczba punktow dla projektow tego typu (0-25). Przy zakladaniu projektu mozna zmienic.
             </p>
           </div>
 
