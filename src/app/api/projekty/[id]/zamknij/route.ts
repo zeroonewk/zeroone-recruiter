@@ -31,8 +31,8 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
       return NextResponse.json({ ok: false, error: 'Nieprawidlowa data zamkniecia' }, { status: 400 });
     }
 
-    if (!Array.isArray(allocations) || allocations.length === 0) {
-      return NextResponse.json({ ok: false, error: 'Brak alokacji punktow' }, { status: 400 });
+    if (!Array.isArray(allocations)) {
+      return NextResponse.json({ ok: false, error: 'Nieprawidlowe allocations' }, { status: 400 });
     }
 
     if (allocations.length > 20) {
@@ -119,23 +119,34 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
       return NextResponse.json({ ok: false, error: 'Brak uprawnien' }, { status: 403 });
     }
 
-    const activeCount = ((userCountRows as { cnt: number }[])[0]?.cnt ?? 0);
-    if (activeCount !== parsed.length) {
+    if (project.points === 0 && parsed.length > 0) {
       return NextResponse.json(
-        { ok: false, error: 'Niektorzy uzytkownicy nie sa aktywni lub nie istnieja' },
+        { ok: false, error: 'Projekt z 0 punktami nie wymaga alokacji' },
         { status: 400 }
       );
     }
 
-    const totalPoints = parsed.reduce((acc, a) => acc + a.points, 0);
-    if (totalPoints !== project.points) {
-      return NextResponse.json(
-        {
-          ok: false,
-          error: `Suma punktow alokacji (${totalPoints}) musi rownic sie puli projektu (${project.points})`,
-        },
-        { status: 400 }
-      );
+    if (project.points > 0) {
+      if (parsed.length === 0) {
+        return NextResponse.json({ ok: false, error: 'Brak alokacji punktow' }, { status: 400 });
+      }
+      const activeCount = ((userCountRows as { cnt: number }[])[0]?.cnt ?? 0);
+      if (activeCount !== parsed.length) {
+        return NextResponse.json(
+          { ok: false, error: 'Niektorzy uzytkownicy nie sa aktywni lub nie istnieja' },
+          { status: 400 }
+        );
+      }
+      const totalPoints = parsed.reduce((acc, a) => acc + a.points, 0);
+      if (totalPoints !== project.points) {
+        return NextResponse.json(
+          {
+            ok: false,
+            error: `Suma punktow alokacji (${totalPoints}) musi rownic sie puli projektu (${project.points})`,
+          },
+          { status: 400 }
+        );
+      }
     }
 
     const allocJson = JSON.stringify(parsed);

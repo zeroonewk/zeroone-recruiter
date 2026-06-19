@@ -447,24 +447,27 @@ export default function ProjektEdycjaClient({
   async function handleCloseSubmit() {
     setCloseError(null);
 
-    if (closeAllocs.some((a) => !a.user_id)) {
-      setCloseError('Wybierz rekrutera dla kazdej alokacji');
-      return;
-    }
-    if (closeAllocs.some((a) => a.points < 1)) {
-      setCloseError('Punkty alokacji musza byc wieksze od 0');
-      return;
-    }
-    const closeSum = closeAllocs.reduce((acc, a) => acc + a.points, 0);
-    if (closeSum !== project.points) {
-      setCloseError(
-        `Suma punktow (${closeSum}) musi rownic sie puli projektu (${project.points})`
-      );
-      return;
-    }
     if (!DATE_RE.test(closeDate)) {
       setCloseError('Nieprawidlowa data zamkniecia');
       return;
+    }
+
+    if (project.points > 0) {
+      if (closeAllocs.some((a) => !a.user_id)) {
+        setCloseError('Wybierz rekrutera dla kazdej alokacji');
+        return;
+      }
+      if (closeAllocs.some((a) => a.points < 1)) {
+        setCloseError('Punkty alokacji musza byc wieksze od 0');
+        return;
+      }
+      const closeSum = closeAllocs.reduce((acc, a) => acc + a.points, 0);
+      if (closeSum !== project.points) {
+        setCloseError(
+          `Suma punktow (${closeSum}) musi rownic sie puli projektu (${project.points})`
+        );
+        return;
+      }
     }
 
     setSubmittingClose(true);
@@ -530,10 +533,11 @@ export default function ProjektEdycjaClient({
   const sumOk = closeSum === project.points;
   const closeCanSubmit =
     !submittingClose &&
-    closeAllocs.length > 0 &&
-    closeAllocs.every((a) => a.user_id && a.points >= 1) &&
-    sumOk &&
-    DATE_RE.test(closeDate);
+    DATE_RE.test(closeDate) &&
+    (project.points === 0 ||
+      (closeAllocs.length > 0 &&
+        closeAllocs.every((a) => a.user_id && a.points >= 1) &&
+        sumOk));
 
   // ── Styles ────────────────────────────────────────────────────────────────
 
@@ -1006,70 +1010,72 @@ export default function ProjektEdycjaClient({
             </div>
 
             <div className="px-6 py-4 space-y-4">
-              {/* Allocations */}
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <p className="text-sm font-medium text-gray-700">
-                    Alokacja punktow (pula: {project.points} pkt)
-                  </p>
-                  <button
-                    type="button"
-                    onClick={addCloseAlloc}
-                    disabled={closeAllocs.length >= 20}
-                    className="text-sm text-[#FF5A3C] hover:underline disabled:opacity-40 disabled:cursor-not-allowed"
+              {/* Allocations — only for projects with points > 0 */}
+              {project.points > 0 && (
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-sm font-medium text-gray-700">
+                      Alokacja punktow (pula: {project.points} pkt)
+                    </p>
+                    <button
+                      type="button"
+                      onClick={addCloseAlloc}
+                      disabled={closeAllocs.length >= 20}
+                      className="text-sm text-[#FF5A3C] hover:underline disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      + Dodaj rekrutera
+                    </button>
+                  </div>
+                  <div className="space-y-2">
+                    {closeAllocs.map((alloc, idx) => (
+                      <div key={idx} className="flex items-center gap-2">
+                        <select
+                          value={alloc.user_id}
+                          onChange={(e) => updateCloseAlloc(idx, 'user_id', e.target.value)}
+                          className="flex-1 px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-[#FF5A3C] focus:border-transparent"
+                        >
+                          <option value="">-- wybierz --</option>
+                          {availableUsers.map((u) => (
+                            <option
+                              key={u.id}
+                              value={u.id}
+                              disabled={closeAllocs.some((a, i) => i !== idx && a.user_id === u.id)}
+                            >
+                              {u.name}
+                            </option>
+                          ))}
+                        </select>
+                        <input
+                          type="number"
+                          min={1}
+                          max={25}
+                          value={alloc.points || ''}
+                          onChange={(e) =>
+                            updateCloseAlloc(idx, 'points', Number(e.target.value))
+                          }
+                          className="w-20 px-2 py-2 border border-gray-300 rounded-md text-sm text-center focus:outline-none focus:ring-2 focus:ring-[#FF5A3C] focus:border-transparent"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => removeCloseAlloc(idx)}
+                          disabled={closeAllocs.length <= 1}
+                          className="text-gray-400 hover:text-red-600 transition-colors px-1 text-xl leading-none disabled:opacity-30 disabled:cursor-not-allowed"
+                          aria-label="Usun rekrutera"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                  <p
+                    className={`text-sm mt-2 font-medium ${
+                      sumOk ? 'text-green-600' : 'text-red-600'
+                    }`}
                   >
-                    + Dodaj rekrutera
-                  </button>
+                    Suma: {closeSum} / {project.points} pkt
+                  </p>
                 </div>
-                <div className="space-y-2">
-                  {closeAllocs.map((alloc, idx) => (
-                    <div key={idx} className="flex items-center gap-2">
-                      <select
-                        value={alloc.user_id}
-                        onChange={(e) => updateCloseAlloc(idx, 'user_id', e.target.value)}
-                        className="flex-1 px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-[#FF5A3C] focus:border-transparent"
-                      >
-                        <option value="">-- wybierz --</option>
-                        {availableUsers.map((u) => (
-                          <option
-                            key={u.id}
-                            value={u.id}
-                            disabled={closeAllocs.some((a, i) => i !== idx && a.user_id === u.id)}
-                          >
-                            {u.name}
-                          </option>
-                        ))}
-                      </select>
-                      <input
-                        type="number"
-                        min={1}
-                        max={25}
-                        value={alloc.points || ''}
-                        onChange={(e) =>
-                          updateCloseAlloc(idx, 'points', Number(e.target.value))
-                        }
-                        className="w-20 px-2 py-2 border border-gray-300 rounded-md text-sm text-center focus:outline-none focus:ring-2 focus:ring-[#FF5A3C] focus:border-transparent"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => removeCloseAlloc(idx)}
-                        disabled={closeAllocs.length <= 1}
-                        className="text-gray-400 hover:text-red-600 transition-colors px-1 text-xl leading-none disabled:opacity-30 disabled:cursor-not-allowed"
-                        aria-label="Usun rekrutera"
-                      >
-                        ×
-                      </button>
-                    </div>
-                  ))}
-                </div>
-                <p
-                  className={`text-sm mt-2 font-medium ${
-                    sumOk ? 'text-green-600' : 'text-red-600'
-                  }`}
-                >
-                  Suma: {closeSum} / {project.points} pkt
-                </p>
-              </div>
+              )}
 
               {/* Close date */}
               <div>
