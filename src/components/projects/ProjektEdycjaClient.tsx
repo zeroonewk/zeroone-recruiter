@@ -270,7 +270,7 @@ export default function ProjektEdycjaClient({
 
     if (chosen.is_success) {
       setCloseModalStatusId(newStatusId);
-      setCloseAllocs([{ user_id: project.owner_id, points: project.points }]);
+      setCloseAllocs(project.points === 0 ? [] : [{ user_id: project.owner_id, points: project.points }]);
       setCloseDate(todayStr());
       setCloseError(null);
       setCloseFreelancerPayouts([]);
