@@ -318,10 +318,12 @@ export async function POST(request: NextRequest) {
     `;
 
     // ── Insert initial point allocation ────────────────────────────────────
-    await sql`
-      INSERT INTO project_point_allocations (project_id, user_id, points)
-      VALUES (${projectId}::uuid, ${owner_id}::uuid, ${points})
-    `;
+    if (points > 0) {
+      await sql`
+        INSERT INTO project_point_allocations (project_id, user_id, points)
+        VALUES (${projectId}::uuid, ${owner_id}::uuid, ${points})
+      `;
+    }
 
     // ── Insert freelancer assignments ──────────────────────────────────────
     if (freelancerIds.length > 0) {
