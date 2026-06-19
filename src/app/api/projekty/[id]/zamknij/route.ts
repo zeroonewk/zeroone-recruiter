@@ -69,9 +69,9 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
 
     const userIds = parsed.map((a) => a.user_id);
 
-    const [projectRows, statusRows, userCountRows] = await Promise.all([
+    const [projectRows, statusRows, userCountRows, freelancerRows, candidateRows] = await Promise.all([
       sql`
-        SELECT p.points, p.owner_id, p.closed_at, rs.is_success AS current_is_success
+        SELECT p.points, p.owner_id, p.closed_at, p.freelancer_rates, rs.is_success AS current_is_success
         FROM projects p
         JOIN result_statuses rs ON rs.id = p.status_id
         WHERE p.id = ${id}::uuid
@@ -82,12 +82,15 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
         `SELECT COUNT(*)::int AS cnt FROM users WHERE id = ANY($1::uuid[]) AND is_active = TRUE`,
         [userIds]
       ),
+      sql`SELECT user_id FROM project_freelancers WHERE project_id = ${id}::uuid`,
+      sql`SELECT user_id, status FROM freelancer_candidates WHERE project_id = ${id}::uuid`,
     ]);
 
     const project = (projectRows as {
       points: number;
       owner_id: string;
       closed_at: string | null;
+      freelancer_rates: unknown;
       current_is_success: boolean;
     }[])[0];
     if (!project) {
@@ -160,6 +163,41 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
        FROM jsonb_array_elements($2::jsonb) AS r`,
       [id, allocJson]
     );
+
+    const assignedFreelancerIds = (freelancerRows as { user_id: string }[]).map((r) => r.user_id);
+    if (assignedFreelancerIds.length > 0) {
+      const rawRates = project.freelancer_rates;
+      const rates = (() => {
+        if (rawRates && typeof rawRates === 'object' && !Array.isArray(rawRates)) {
+          const r = rawRates as Record<string, unknown>;
+          return {
+            cv_rate: typeof r.cv_rate === 'number' ? r.cv_rate : 1,
+            meeting_rate: typeof r.meeting_rate === 'number' ? r.meeting_rate : 5,
+            project_value: typeof r.project_value === 'number' ? r.project_value : null,
+          };
+        }
+        return { cv_rate: 1, meeting_rate: 5, project_value: null };
+      })();
+      const effectiveValue = rates.project_value ?? project.points;
+      const candidates = candidateRows as { user_id: string; status: string }[];
+
+      const payouts = assignedFreelancerIds.map((uid) => {
+        const mine = candidates.filter((c) => c.user_id === uid);
+        const stage1 = mine.filter((c) => c.status === 'stage1').length;
+        const stage2 = mine.filter((c) => c.status === 'stage2').length;
+        const hasSelected = mine.some((c) => c.status === 'selected');
+        const paid = stage1 * rates.cv_rate + stage2 * rates.meeting_rate;
+        const bonus = hasSelected ? Math.max(0, effectiveValue - paid) : 0;
+        return { user_id: uid, amount: paid + bonus };
+      });
+
+      await sql.query(
+        `INSERT INTO freelancer_payouts (project_id, user_id, amount)
+         SELECT $1::uuid, (r->>'user_id')::uuid, (r->>'amount')::numeric
+         FROM jsonb_array_elements($2::jsonb) AS r`,
+        [id, JSON.stringify(payouts)]
+      );
+    }
 
     return NextResponse.json({ ok: true });
   } catch (e) {

@@ -31,6 +31,8 @@ type Props = {
 type Toast = { type: 'success' | 'error'; message: string };
 type LinkDraft = { label: string; url: string };
 type Alloc = { user_id: string; points: number };
+type CloseCandidate = { user_id: string; status: 'submitted' | 'stage1' | 'stage2' | 'selected' };
+type FreelancerPayout = { user_id: string; name: string; amount: number };
 
 const URL_RE = /^https?:\/\//;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -91,6 +93,8 @@ export default function ProjektEdycjaClient({
   const [closeDate, setCloseDate] = useState('');
   const [closeError, setCloseError] = useState<string | null>(null);
   const [submittingClose, setSubmittingClose] = useState(false);
+  const [closeFreelancerPayouts, setCloseFreelancerPayouts] = useState<FreelancerPayout[]>([]);
+  const [loadingFreelancerPayouts, setLoadingFreelancerPayouts] = useState(false);
 
   useEffect(() => {
     if (!toast) return;
@@ -269,7 +273,37 @@ export default function ProjektEdycjaClient({
       setCloseAllocs([{ user_id: project.owner_id, points: project.points }]);
       setCloseDate(todayStr());
       setCloseError(null);
+      setCloseFreelancerPayouts([]);
       setCloseModalOpen(true);
+
+      if (freelancerIds.length > 0) {
+        setLoadingFreelancerPayouts(true);
+        void fetch(`/api/admin/freelancer/projects/${project.id}/candidates`)
+          .then((r) => r.json())
+          .then((data: { ok: boolean; items?: CloseCandidate[] }) => {
+            if (data.ok && data.items) {
+              const rates = {
+                cv_rate: cvRate,
+                meeting_rate: meetingRate,
+                project_value: projectValue === '' ? null : projectValue,
+              };
+              const effectiveValue = rates.project_value ?? project.points;
+              const payouts: FreelancerPayout[] = freelancerIds.map((uid) => {
+                const name = availableFreelancers.find((f) => f.id === uid)?.name ?? uid;
+                const mine = (data.items ?? []).filter((c) => c.user_id === uid);
+                const stage1 = mine.filter((c) => c.status === 'stage1').length;
+                const stage2 = mine.filter((c) => c.status === 'stage2').length;
+                const hasSelected = mine.some((c) => c.status === 'selected');
+                const paid = stage1 * rates.cv_rate + stage2 * rates.meeting_rate;
+                const bonus = hasSelected ? Math.max(0, effectiveValue - paid) : 0;
+                return { user_id: uid, name, amount: paid + bonus };
+              });
+              setCloseFreelancerPayouts(payouts);
+            }
+          })
+          .catch(() => {})
+          .finally(() => setLoadingFreelancerPayouts(false));
+      }
       return;
     }
 
@@ -407,6 +441,7 @@ export default function ProjektEdycjaClient({
     setCloseAllocs([]);
     setCloseDate('');
     setCloseError(null);
+    setCloseFreelancerPayouts([]);
   }
 
   async function handleCloseSubmit() {
@@ -1048,6 +1083,33 @@ export default function ProjektEdycjaClient({
                   className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-[#FF5A3C] focus:border-transparent"
                 />
               </div>
+
+              {/* Freelancer payouts */}
+              {freelancerIds.length > 0 && (
+                <div>
+                  <p className="text-sm font-medium text-gray-700 mb-2">Wynagrodzenia freelancerow</p>
+                  {loadingFreelancerPayouts ? (
+                    <p className="text-xs text-gray-400">Ladowanie...</p>
+                  ) : closeFreelancerPayouts.length === 0 ? (
+                    <p className="text-xs text-gray-400">Brak kandydatow — wynagrodzenie 0 zł</p>
+                  ) : (
+                    <div className="bg-gray-50 rounded-md px-3 py-2 space-y-1.5">
+                      {closeFreelancerPayouts.map((fp) => (
+                        <div key={fp.user_id} className="flex justify-between items-center text-sm">
+                          <span className="text-gray-700">{fp.name}</span>
+                          <span className="font-medium text-gray-900">{fp.amount} zł</span>
+                        </div>
+                      ))}
+                      <div className="border-t border-gray-200 pt-1.5 flex justify-between text-sm font-semibold">
+                        <span className="text-gray-700">Razem do wyplaty</span>
+                        <span className="text-gray-900">
+                          {closeFreelancerPayouts.reduce((s, fp) => s + fp.amount, 0)} zł
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Error */}
               {closeError && (

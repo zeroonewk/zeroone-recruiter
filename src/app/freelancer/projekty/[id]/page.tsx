@@ -69,7 +69,7 @@ export default async function FreelancerProjektPage({
   const { id } = await params;
   if (!UUID_RE.test(id)) notFound();
 
-  const [projectRows, candidateRows] = await Promise.all([
+  const [projectRows, candidateRows, payoutRows] = await Promise.all([
     sql`
       SELECT
         p.id,
@@ -98,15 +98,43 @@ export default async function FreelancerProjektPage({
       WHERE project_id = ${id}::uuid AND user_id = ${session.sub}::uuid
       ORDER BY created_at ASC
     `,
+    sql`
+      SELECT amount FROM freelancer_payouts
+      WHERE project_id = ${id}::uuid AND user_id = ${session.sub}::uuid
+      LIMIT 1
+    `,
   ]);
 
   if (!projectRows || projectRows.length === 0) notFound();
 
   const project = projectRows[0] as ProjectRow;
   const candidates = candidateRows as CandidateRow[];
+  const payout = (payoutRows as { amount: string | number }[])[0] ?? null;
   const isActive = project.closed_at === null && project.status_id === ACTIVE_STATUS_ID;
   const rates = normalizeRates(project.freelancer_rates, project.points);
   const earnings = calcEarnings(candidates, rates, project.points);
+
+  if (project.closed_at !== null && payout) {
+    return (
+      <FreelancerShell user={{ name: session.name, email: session.email }}>
+        <div className="max-w-4xl mx-auto px-6 py-8">
+          <Link
+            href="/freelancer"
+            className="text-sm text-gray-500 hover:text-gray-700 mb-4 inline-block"
+          >
+            &larr; Powrot do projektow
+          </Link>
+          <div className="bg-green-50 border border-green-200 rounded-xl px-6 py-6 mt-2">
+            <p className="text-sm text-gray-500 mb-1">{project.client_name}</p>
+            <h1 className="text-xl font-bold text-gray-900 mb-4">{project.title}</h1>
+            <p className="text-green-700 text-base font-medium">
+              Projekt zamkniety. Twoje wynagrodzenie: {Number(payout.amount)} zl. Wystaw dokument sprzedazy zgodnie z umowa.
+            </p>
+          </div>
+        </div>
+      </FreelancerShell>
+    );
+  }
 
   return (
     <FreelancerShell user={{ name: session.name, email: session.email }}>
