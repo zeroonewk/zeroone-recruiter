@@ -81,8 +81,12 @@ export default async function FreelancerProjektPage({
         c.name AS client_name,
         (
           SELECT elem->>'url'
-          FROM jsonb_array_elements(p.links) AS elem
-          WHERE elem->>'label' = 'job_url'
+          FROM jsonb_array_elements(COALESCE(p.links, '[]'::jsonb)) AS elem
+          WHERE elem->>'label' ILIKE '%jns%'
+             OR elem->>'label' ILIKE '%jobnonstop%'
+             OR elem->>'label' ILIKE '%oferta%'
+             OR elem->>'label' ILIKE '%ogloszenie%'
+             OR elem->>'url'   ILIKE '%jobnonstop.pl%'
           LIMIT 1
         ) AS job_url
       FROM projects p
@@ -154,9 +158,9 @@ export default async function FreelancerProjektPage({
               <h1 className="text-2xl font-bold text-gray-900">{project.title}</h1>
             </div>
             <div className="flex items-center gap-3">
-              {project.points > 0 && (
+              {earnings.effectiveValue > 0 && (
                 <span className="text-sm font-bold text-[#FF5A3C] bg-[#FF5A3C]/10 px-3 py-1 rounded-full">
-                  {project.points} zł
+                  {earnings.effectiveValue} zł
                 </span>
               )}
               {!isActive && (
@@ -166,16 +170,6 @@ export default async function FreelancerProjektPage({
               )}
             </div>
           </div>
-          {project.job_url && (
-            <a
-              href={project.job_url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="mt-2 inline-flex items-center gap-1 text-sm text-blue-600 hover:underline"
-            >
-              Zobacz ogloszenie &rarr;
-            </a>
-          )}
         </div>
 
         {/* Podglad projektu */}
@@ -277,6 +271,25 @@ export default async function FreelancerProjektPage({
             </p>
           </div>
         )}
+
+        {/* Rates overview */}
+        <div className="bg-white border border-gray-200 rounded-xl px-5 py-5">
+          <h2 className="font-semibold text-gray-900 mb-4">Stawki wynagrodzenia</h2>
+          <div className="grid grid-cols-3 gap-3">
+            <div className="bg-gray-50 rounded-lg px-4 py-3">
+              <p className="text-xs text-gray-500 mb-1">Za zaakceptowane CV</p>
+              <p className="text-xl font-bold text-gray-900">{rates.cv_rate} <span className="text-sm font-normal text-gray-500">zł</span></p>
+            </div>
+            <div className="bg-gray-50 rounded-lg px-4 py-3">
+              <p className="text-xs text-gray-500 mb-1">Za spotkanie z klientem</p>
+              <p className="text-xl font-bold text-gray-900">{rates.meeting_rate} <span className="text-sm font-normal text-gray-500">zł</span></p>
+            </div>
+            <div className="bg-gray-50 rounded-lg px-4 py-3">
+              <p className="text-xs text-gray-500 mb-1">Za wybranie kandydata</p>
+              <p className="text-xl font-bold text-gray-900">{earnings.effectiveValue} <span className="text-sm font-normal text-gray-500">zł</span></p>
+            </div>
+          </div>
+        </div>
 
         {/* Earnings */}
         <div className="bg-white border border-gray-200 rounded-xl px-5 py-5">

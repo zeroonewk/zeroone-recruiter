@@ -12,11 +12,16 @@ export async function GET() {
         p.title,
         p.points,
         p.closed_at,
+        p.freelancer_rates,
         c.name AS client_name,
         (
           SELECT elem->>'url'
           FROM jsonb_array_elements(p.links) AS elem
-          WHERE elem->>'label' = 'job_url'
+          WHERE elem->>'label' ILIKE '%jns%'
+             OR elem->>'label' ILIKE '%jobnonstop%'
+             OR elem->>'label' ILIKE '%oferta%'
+             OR elem->>'label' ILIKE '%ogloszenie%'
+             OR elem->>'url'   ILIKE '%jobnonstop.pl%'
           LIMIT 1
         ) AS job_url,
         fp.amount AS payout_amount
@@ -31,6 +36,7 @@ export async function GET() {
       title: string;
       points: number;
       closed_at: string | null;
+      freelancer_rates: unknown;
       client_name: string;
       job_url: string | null;
       payout_amount: string | null;

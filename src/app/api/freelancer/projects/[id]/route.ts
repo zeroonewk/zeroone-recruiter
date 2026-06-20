@@ -27,7 +27,11 @@ export async function GET(_req: NextRequest, { params }: RouteContext) {
         (
           SELECT elem->>'url'
           FROM jsonb_array_elements(p.links) AS elem
-          WHERE elem->>'label' = 'job_url'
+          WHERE elem->>'label' ILIKE '%jns%'
+             OR elem->>'label' ILIKE '%jobnonstop%'
+             OR elem->>'label' ILIKE '%oferta%'
+             OR elem->>'label' ILIKE '%ogloszenie%'
+             OR elem->>'url'   ILIKE '%jobnonstop.pl%'
           LIMIT 1
         ) AS job_url
       FROM projects p

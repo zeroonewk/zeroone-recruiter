@@ -11,10 +11,19 @@ type ProjectRow = {
   title: string;
   points: number;
   closed_at: string | null;
+  freelancer_rates: unknown;
   client_name: string;
   job_url: string | null;
   payout_amount: string | null;
 };
+
+function effectiveValue(raw: unknown, points: number): number {
+  if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+    const r = raw as Record<string, unknown>;
+    if (typeof r.project_value === 'number') return r.project_value;
+  }
+  return points;
+}
 
 function formatDate(raw: string): string {
   const d = new Date(raw);
@@ -32,11 +41,16 @@ export default async function FreelancerPage() {
       p.title,
       p.points,
       p.closed_at,
+      p.freelancer_rates,
       c.name AS client_name,
       (
         SELECT elem->>'url'
-        FROM jsonb_array_elements(p.links) AS elem
-        WHERE elem->>'label' = 'job_url'
+        FROM jsonb_array_elements(COALESCE(p.links, '[]'::jsonb)) AS elem
+        WHERE elem->>'label' ILIKE '%jns%'
+           OR elem->>'label' ILIKE '%jobnonstop%'
+           OR elem->>'label' ILIKE '%oferta%'
+           OR elem->>'label' ILIKE '%ogloszenie%'
+           OR elem->>'url'   ILIKE '%jobnonstop.pl%'
         LIMIT 1
       ) AS job_url,
       fp.amount AS payout_amount
@@ -75,9 +89,9 @@ export default async function FreelancerPage() {
                         {project.title}
                       </h2>
                     </div>
-                    {project.points > 0 && (
+                    {effectiveValue(project.freelancer_rates, project.points) > 0 && (
                       <span className="shrink-0 text-sm font-bold text-[#FF5A3C] bg-[#FF5A3C]/10 px-2 py-0.5 rounded-full">
-                        {project.points} zł
+                        {effectiveValue(project.freelancer_rates, project.points)} zł
                       </span>
                     )}
                   </div>
