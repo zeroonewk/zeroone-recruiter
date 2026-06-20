@@ -123,7 +123,7 @@ export default function FreelancerCandidatesSection({ projectId, freelancerRates
   if (candidates.length === 0) {
     return (
       <div className="bg-white border border-gray-200 rounded-lg p-6">
-        <h2 className="text-base font-semibold text-gray-900 mb-2">Kandydaci freelancerow</h2>
+        <h2 className="text-base font-semibold text-gray-900 mb-2">Kandydaci freelancerow (0)</h2>
         <p className="text-sm text-gray-500">Brak kandydatow.</p>
       </div>
     );
@@ -133,7 +133,7 @@ export default function FreelancerCandidatesSection({ projectId, freelancerRates
 
   return (
     <div className="bg-white border border-gray-200 rounded-lg p-6">
-      <h2 className="text-base font-semibold text-gray-900 mb-6">Kandydaci freelancerow</h2>
+      <h2 className="text-base font-semibold text-gray-900 mb-6">Kandydaci freelancerow ({candidates.length})</h2>
 
       <div className="space-y-8">
         {groups.map((group) => {

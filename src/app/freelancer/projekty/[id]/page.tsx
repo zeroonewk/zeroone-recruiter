@@ -178,6 +178,24 @@ export default async function FreelancerProjektPage({
           )}
         </div>
 
+        {/* Podglad projektu */}
+        {project.job_url && (
+          <div className="bg-white border border-gray-200 rounded-xl px-5 py-5">
+            <h2 className="font-semibold text-gray-900 mb-3">Podglad projektu</h2>
+            <a
+              href={project.job_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 px-4 py-2 bg-blue-50 text-blue-700 border border-blue-200 rounded-lg text-sm font-medium hover:bg-blue-100 transition-colors"
+            >
+              Zobacz ogloszenie
+              <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+              </svg>
+            </a>
+          </div>
+        )}
+
         {/* Candidates table */}
         <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
           <div className="px-5 py-4 border-b border-gray-100">

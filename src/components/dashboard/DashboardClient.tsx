@@ -270,95 +270,8 @@ export default function DashboardClient({ initialData, period }: Props) {
         </div>
       </div>
 
-      {/* ── Lower row: analytical widgets (period-dependent) ─────────────── */}
+      {/* ── Lower row: Split ─────────────────────────────────────────────── */}
       <div className="grid lg:grid-cols-3 gap-4">
-
-        {/* Widget 4: Points + ranking (2 cols) */}
-        <div className={`${CARD} lg:col-span-2`}>
-          <div className="grid grid-cols-3 gap-6 h-full">
-            {/* Left: total */}
-            <div>
-              <h3 className={`${H3} mb-1`}>Punkty zdobyte</h3>
-              <p className="text-xs text-gray-500 mb-4">{PERIOD_LABEL[period]}</p>
-              <p className="text-5xl font-bold text-[#FF5A3C] leading-none">{points.total}</p>
-              <p className="text-sm text-gray-600 mt-2">
-                {points.total === 1 ? 'punkt' : 'punktow'} zdobyte
-              </p>
-            </div>
-            {/* Right: ranking */}
-            <div className="col-span-2">
-              <h3 className={`${H3} mb-4`}>Ranking rekruterow</h3>
-              {points.ranking.length === 0 ? (
-                <p className="text-sm text-gray-400">Brak punktow w tym okresie</p>
-              ) : (
-                <ResponsiveContainer
-                  width="100%"
-                  height={Math.max(120, points.ranking.length * 36)}
-                >
-                  <BarChart
-                    layout="vertical"
-                    data={points.ranking}
-                    margin={{ top: 0, right: 40, bottom: 0, left: 0 }}
-                  >
-                    <XAxis type="number" hide />
-                    <YAxis
-                      type="category"
-                      dataKey="name"
-                      width={110}
-                      tick={{ fontSize: 12 }}
-                      axisLine={false}
-                      tickLine={false}
-                    />
-                    <Tooltip
-                      {...TOOLTIP_STYLE}
-                      formatter={(value) => [`${value} pkt`, '']}
-                    />
-                    <Bar dataKey="points" fill="#FF5A3C" radius={[0, 4, 4, 0]}>
-                      <LabelList
-                        dataKey="points"
-                        position="right"
-                        style={{ fill: '#374151', fontSize: 12, fontWeight: 600 }}
-                      />
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* Widget 5: Performance */}
-        <div className={CARD}>
-          <h3 className={`${H3} mb-4`}>Wydajnosc</h3>
-
-          <div className="mb-5">
-            <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">
-              Sredni czas realizacji
-            </p>
-            <div className="flex items-baseline gap-2">
-              <span className="text-3xl font-bold text-gray-900">
-                {performance.avg_days ?? '—'}
-              </span>
-              {performance.avg_days !== null && (
-                <span className="text-gray-500 text-sm">dni</span>
-              )}
-            </div>
-            <p className="text-xs text-gray-400 mt-1">od otwarcia do zamkniecia z sukcesem</p>
-          </div>
-
-          <div>
-            <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Skutecznosc</p>
-            <div className="flex items-baseline gap-2">
-              <span className="text-2xl font-bold text-gray-900">
-                {performance.success_count} / {performance.total_count}
-              </span>
-            </div>
-            <p className="text-3xl font-bold text-gray-900 mt-1">
-              {successRate !== null ? `${successRate}%` : '—'}
-            </p>
-            <p className="text-xs text-gray-400 mt-1">projekty zamkniete z sukcesem</p>
-          </div>
-        </div>
 
         {/* Widget 6: Split (full width row) */}
         <div className={`${CARD} lg:col-span-3`}>
@@ -451,6 +364,92 @@ export default function DashboardClient({ initialData, period }: Props) {
       {/* Funnel widget */}
       <div className="mt-6">
         <FunnelWidget data={funnelTotals} />
+      </div>
+
+      {/* Widget 4+5: Points + Performance (period-dependent, na dole) */}
+      <div className="mt-6 grid lg:grid-cols-3 gap-4">
+        <div className={`${CARD} lg:col-span-2`}>
+          <div className="grid grid-cols-3 gap-6 h-full">
+            <div>
+              <h3 className={`${H3} mb-1`}>Punkty zdobyte</h3>
+              <p className="text-xs text-gray-500 mb-4">{PERIOD_LABEL[period]}</p>
+              <p className="text-5xl font-bold text-[#FF5A3C] leading-none">{points.total}</p>
+              <p className="text-sm text-gray-600 mt-2">
+                {points.total === 1 ? 'punkt' : 'punktow'} zdobyte
+              </p>
+            </div>
+            <div className="col-span-2">
+              <h3 className={`${H3} mb-4`}>Ranking rekruterow</h3>
+              {points.ranking.length === 0 ? (
+                <p className="text-sm text-gray-400">Brak punktow w tym okresie</p>
+              ) : (
+                <ResponsiveContainer
+                  width="100%"
+                  height={Math.max(120, points.ranking.length * 36)}
+                >
+                  <BarChart
+                    layout="vertical"
+                    data={points.ranking}
+                    margin={{ top: 0, right: 40, bottom: 0, left: 0 }}
+                  >
+                    <XAxis type="number" hide />
+                    <YAxis
+                      type="category"
+                      dataKey="name"
+                      width={110}
+                      tick={{ fontSize: 12 }}
+                      axisLine={false}
+                      tickLine={false}
+                    />
+                    <Tooltip
+                      {...TOOLTIP_STYLE}
+                      formatter={(value) => [`${value} pkt`, '']}
+                    />
+                    <Bar dataKey="points" fill="#FF5A3C" radius={[0, 4, 4, 0]}>
+                      <LabelList
+                        dataKey="points"
+                        position="right"
+                        style={{ fill: '#374151', fontSize: 12, fontWeight: 600 }}
+                      />
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div className={CARD}>
+          <h3 className={`${H3} mb-4`}>Wydajnosc</h3>
+
+          <div className="mb-5">
+            <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">
+              Sredni czas realizacji
+            </p>
+            <div className="flex items-baseline gap-2">
+              <span className="text-3xl font-bold text-gray-900">
+                {performance.avg_days ?? '—'}
+              </span>
+              {performance.avg_days !== null && (
+                <span className="text-gray-500 text-sm">dni</span>
+              )}
+            </div>
+            <p className="text-xs text-gray-400 mt-1">od otwarcia do zamkniecia z sukcesem</p>
+          </div>
+
+          <div>
+            <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Skutecznosc</p>
+            <div className="flex items-baseline gap-2">
+              <span className="text-2xl font-bold text-gray-900">
+                {performance.success_count} / {performance.total_count}
+              </span>
+            </div>
+            <p className="text-3xl font-bold text-gray-900 mt-1">
+              {successRate !== null ? `${successRate}%` : '—'}
+            </p>
+            <p className="text-xs text-gray-400 mt-1">projekty zamkniete z sukcesem</p>
+          </div>
+        </div>
       </div>
     </div>
   );

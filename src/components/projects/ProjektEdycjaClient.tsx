@@ -589,65 +589,87 @@ export default function ProjektEdycjaClient({
         )}
       </div>
 
-      {/* Main grid */}
-      <div className="grid lg:grid-cols-3 gap-6">
-        {/* ── Left column: Stages ──────────────────────────────────────── */}
+      {/* ── BLOK ROBOCZY ────────────────────────────────────────────────── */}
+      <div className="space-y-6 mb-8">
+        {/* Etapy procesu */}
         {!disableStages && (
-          <div className="lg:col-span-2">
-            <div className={cardCls}>
-              <h2 className={h2Cls}>Etapy procesu</h2>
-              {stages.length === 0 ? (
-                <p className="text-sm text-gray-500">Brak etapow.</p>
-              ) : (
-                <div className="space-y-3">
-                  {stages.map((stage) => (
-                    <div key={stage.id} className="flex items-center gap-3">
-                      <input
-                        type="checkbox"
-                        checked={stage.done_at !== null}
-                        disabled={savingStageId === stage.id}
-                        onChange={(e) => void handleStageToggle(stage, e.target.checked)}
-                        className="w-5 h-5 accent-[#FF5A3C] cursor-pointer shrink-0 disabled:cursor-not-allowed"
-                      />
-                      <div className="flex-1 min-w-0">
-                        <p
-                          className={`text-sm ${
-                            stage.done_at
-                              ? 'line-through text-gray-400'
-                              : 'font-medium text-gray-900'
-                          }`}
-                        >
-                          {stage.position}. {stage.name}
-                        </p>
-                        {stage.done_at && (
-                          <p className="text-xs text-gray-500 mt-0.5">
-                            Wykonano: {formatDatePL(stage.done_at)}
-                          </p>
-                        )}
-                      </div>
-                      <input
-                        key={stage.deadline}
-                        type="date"
-                        defaultValue={stage.deadline}
-                        disabled={stage.done_at !== null || savingStageId === stage.id}
-                        onBlur={(e) => void handleStageDeadlineBlur(stage, e.target.value)}
-                        className={`px-2 py-1 border rounded text-sm w-36 focus:outline-none focus:ring-2 focus:ring-[#FF5A3C] focus:border-transparent disabled:bg-gray-50 disabled:text-gray-400 disabled:cursor-not-allowed ${
-                          isOverdue(stage)
-                            ? 'text-red-600 font-medium border-red-300'
-                            : 'text-gray-700 border-gray-300'
+          <div className={cardCls}>
+            <h2 className={h2Cls}>Etapy procesu - kliknij w najbardziej zaawansowany</h2>
+            {stages.length === 0 ? (
+              <p className="text-sm text-gray-500">Brak etapow.</p>
+            ) : (
+              <div className="space-y-3">
+                {stages.map((stage) => (
+                  <div key={stage.id} className="flex items-center gap-3">
+                    <input
+                      type="checkbox"
+                      checked={stage.done_at !== null}
+                      disabled={savingStageId === stage.id}
+                      onChange={(e) => void handleStageToggle(stage, e.target.checked)}
+                      className="w-5 h-5 accent-[#FF5A3C] cursor-pointer shrink-0 disabled:cursor-not-allowed"
+                    />
+                    <div className="flex-1 min-w-0">
+                      <p
+                        className={`text-sm ${
+                          stage.done_at
+                            ? 'line-through text-gray-400'
+                            : 'font-medium text-gray-900'
                         }`}
-                      />
+                      >
+                        {stage.position}. {stage.name}
+                      </p>
+                      {stage.done_at && (
+                        <p className="text-xs text-gray-500 mt-0.5">
+                          Wykonano: {formatDatePL(stage.done_at)}
+                        </p>
+                      )}
                     </div>
-                  ))}
-                </div>
-              )}
-            </div>
+                    <input
+                      key={stage.deadline}
+                      type="date"
+                      defaultValue={stage.deadline}
+                      disabled={stage.done_at !== null || savingStageId === stage.id}
+                      onBlur={(e) => void handleStageDeadlineBlur(stage, e.target.value)}
+                      className={`px-2 py-1 border rounded text-sm w-36 focus:outline-none focus:ring-2 focus:ring-[#FF5A3C] focus:border-transparent disabled:bg-gray-50 disabled:text-gray-400 disabled:cursor-not-allowed ${
+                        isOverdue(stage)
+                          ? 'text-red-600 font-medium border-red-300'
+                          : 'text-gray-700 border-gray-300'
+                      }`}
+                    />
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
 
-        {/* ── Right column ─────────────────────────────────────────────── */}
-        <div className={`space-y-6 ${disableStages ? 'lg:col-span-3' : ''}`}>
-          {/* Card 1: Metadane */}
+        {/* Lejek procesu */}
+        <FunnelCard
+          projectId={project.id}
+          initialFunnel={project.funnel}
+          onUpdate={(newFunnel: FunnelData) => setProject((prev) => ({ ...prev, funnel: newFunnel }))}
+          showToast={showToast}
+        />
+
+        {/* Kandydaci freelancerow */}
+        {availableFreelancers.length > 0 && (
+          <FreelancerCandidatesSection
+            projectId={project.id}
+            freelancerRates={{
+              cv_rate: cvRate,
+              meeting_rate: meetingRate,
+              project_value: projectValue === '' ? null : projectValue,
+            }}
+            projectPoints={project.points}
+          />
+        )}
+      </div>
+
+      {/* ── BLOK ADMINISTRACYJNY ────────────────────────────────────────── */}
+      <div className="space-y-6">
+        {/* Rzad 1: Metadane + Freelancerzy */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Metadane */}
           <div className={cardCls}>
             <h2 className={h2Cls}>Metadane</h2>
             <dl className="text-sm divide-y divide-gray-100">
@@ -787,89 +809,7 @@ export default function ProjektEdycjaClient({
             </div>
           </div>
 
-          {/* Card 2: Notatki */}
-          <div className={cardCls}>
-            <h2 className={h2Cls}>Notatki</h2>
-            <textarea
-              rows={5}
-              value={notesDraft}
-              onChange={(e) => setNotesDraft(e.target.value)}
-              className={inputCls + ' resize-none'}
-              placeholder="Brak notatek..."
-            />
-            {notesDraft !== (project.notes ?? '') && (
-              <div className="mt-3 flex justify-end">
-                <button
-                  type="button"
-                  onClick={() => void handleSaveNotes()}
-                  disabled={savingNotes}
-                  className={btnPrimary}
-                >
-                  {savingNotes ? 'Zapisywanie...' : 'Zapisz notatki'}
-                </button>
-              </div>
-            )}
-          </div>
-
-          {/* Card 3: Linki */}
-          <div className={cardCls}>
-            <div className="flex items-center gap-3 mb-4">
-              <h2 className="text-base font-semibold text-gray-900">Linki</h2>
-              <button
-                type="button"
-                onClick={addLink}
-                className="text-sm text-[#FF5A3C] hover:underline"
-              >
-                + Dodaj link
-              </button>
-            </div>
-            {linksDraft.length === 0 ? (
-              <p className="text-sm text-gray-400">Brak linkow.</p>
-            ) : (
-              <div className="space-y-2">
-                {linksDraft.map((l, idx) => (
-                  <div key={idx} className="grid grid-cols-[1fr_2fr_auto] gap-2 items-center">
-                    <input
-                      type="text"
-                      placeholder="Etykieta"
-                      value={l.label}
-                      onChange={(e) => updateLink(idx, 'label', e.target.value)}
-                      className={inputCls}
-                    />
-                    <input
-                      type="url"
-                      placeholder="https://..."
-                      value={l.url}
-                      onChange={(e) => updateLink(idx, 'url', e.target.value)}
-                      className={inputCls}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => removeLink(idx)}
-                      className="text-gray-400 hover:text-red-600 transition-colors px-1 text-xl leading-none"
-                      aria-label="Usun link"
-                    >
-                      ×
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-            {linksChanged && (
-              <div className="mt-3 flex justify-end">
-                <button
-                  type="button"
-                  onClick={() => void handleSaveLinks()}
-                  disabled={savingLinks}
-                  className={btnPrimary}
-                >
-                  {savingLinks ? 'Zapisywanie...' : 'Zapisz linki'}
-                </button>
-              </div>
-            )}
-          </div>
-
-          {/* Card 4: Freelancerzy */}
+          {/* Freelancerzy */}
           {availableFreelancers.length > 0 && (
             <div className={cardCls}>
               <h2 className={h2Cls}>Freelancerzy</h2>
@@ -948,8 +888,90 @@ export default function ProjektEdycjaClient({
               )}
             </div>
           )}
+        </div>
 
-          {/* Card 5: Akcje */}
+        {/* Rzad 2: Notatki + Linki + Akcje */}
+        <div className="space-y-6">
+          <div className={cardCls}>
+            <h2 className={h2Cls}>Notatki</h2>
+            <textarea
+              rows={5}
+              value={notesDraft}
+              onChange={(e) => setNotesDraft(e.target.value)}
+              className={inputCls + ' resize-none'}
+              placeholder="Brak notatek..."
+            />
+            {notesDraft !== (project.notes ?? '') && (
+              <div className="mt-3 flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => void handleSaveNotes()}
+                  disabled={savingNotes}
+                  className={btnPrimary}
+                >
+                  {savingNotes ? 'Zapisywanie...' : 'Zapisz notatki'}
+                </button>
+              </div>
+            )}
+          </div>
+
+          <div className={cardCls}>
+            <div className="flex items-center gap-3 mb-4">
+              <h2 className="text-base font-semibold text-gray-900">Linki</h2>
+              <button
+                type="button"
+                onClick={addLink}
+                className="text-sm text-[#FF5A3C] hover:underline"
+              >
+                + Dodaj link
+              </button>
+            </div>
+            {linksDraft.length === 0 ? (
+              <p className="text-sm text-gray-400">Brak linkow.</p>
+            ) : (
+              <div className="space-y-2">
+                {linksDraft.map((l, idx) => (
+                  <div key={idx} className="grid grid-cols-[1fr_2fr_auto] gap-2 items-center">
+                    <input
+                      type="text"
+                      placeholder="Etykieta"
+                      value={l.label}
+                      onChange={(e) => updateLink(idx, 'label', e.target.value)}
+                      className={inputCls}
+                    />
+                    <input
+                      type="url"
+                      placeholder="https://..."
+                      value={l.url}
+                      onChange={(e) => updateLink(idx, 'url', e.target.value)}
+                      className={inputCls}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => removeLink(idx)}
+                      className="text-gray-400 hover:text-red-600 transition-colors px-1 text-xl leading-none"
+                      aria-label="Usun link"
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+            {linksChanged && (
+              <div className="mt-3 flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => void handleSaveLinks()}
+                  disabled={savingLinks}
+                  className={btnPrimary}
+                >
+                  {savingLinks ? 'Zapisywanie...' : 'Zapisz linki'}
+                </button>
+              </div>
+            )}
+          </div>
+
           <div className={cardCls}>
             <h2 className={h2Cls}>Akcje</h2>
             {project.is_archived ? (
@@ -971,31 +993,6 @@ export default function ProjektEdycjaClient({
             )}
           </div>
         </div>
-      </div>
-
-      {/* Freelancer Candidates — admin view */}
-      {availableFreelancers.length > 0 && (
-        <div className="mt-6">
-          <FreelancerCandidatesSection
-            projectId={project.id}
-            freelancerRates={{
-              cv_rate: cvRate,
-              meeting_rate: meetingRate,
-              project_value: projectValue === '' ? null : projectValue,
-            }}
-            projectPoints={project.points}
-          />
-        </div>
-      )}
-
-      {/* Funnel */}
-      <div className="mt-6">
-        <FunnelCard
-          projectId={project.id}
-          initialFunnel={project.funnel}
-          onUpdate={(newFunnel: FunnelData) => setProject((prev) => ({ ...prev, funnel: newFunnel }))}
-          showToast={showToast}
-        />
       </div>
 
       {/* ── Close project modal ───────────────────────────────────────────── */}
