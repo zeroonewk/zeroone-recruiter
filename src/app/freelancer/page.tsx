@@ -95,17 +95,6 @@ export default async function FreelancerPage() {
                       </span>
                     )}
                   </div>
-                  {project.job_url && (
-                    <a
-                      href={project.job_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      onClick={(e) => e.stopPropagation()}
-                      className="mt-3 inline-flex items-center gap-1 text-xs text-blue-600 hover:underline"
-                    >
-                      Zobacz ogloszenie &rarr;
-                    </a>
-                  )}
                 </Link>
               ))}
             </div>
