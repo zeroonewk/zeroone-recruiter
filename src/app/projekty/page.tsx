@@ -27,7 +27,8 @@ export default async function ProjektyPage() {
         cur_stage.name AS current_stage_name,
         cur_stage.deadline AS current_stage_deadline,
         cur_stage.position AS current_stage_position,
-        COALESCE(cur_stage.is_overdue, false) AS is_overdue
+        COALESCE(cur_stage.is_overdue, false) AS is_overdue,
+        EXISTS(SELECT 1 FROM project_freelancers pf WHERE pf.project_id = p.id) AS has_freelancers
       FROM projects p
       JOIN clients c ON c.id = p.client_id
       JOIN project_types pt ON pt.id = p.project_type_id
@@ -80,6 +81,7 @@ export default async function ProjektyPage() {
           current_stage_deadline: toDateString(r.current_stage_deadline),
           current_stage_position: (r.current_stage_position as number | null) ?? null,
           is_overdue: r.is_overdue as boolean,
+          has_freelancers: r.has_freelancers as boolean,
         })) as ProjectListItem[]}
         statuses={statusRows as FilterOption[]}
         types={typeRows as FilterOption[]}

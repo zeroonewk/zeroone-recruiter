@@ -122,6 +122,8 @@ export default async function StatusPage({
   const period: PeriodKey =
     rawOkres === 'today' ? 'today' :
     rawOkres === 'last_week' ? 'last_week' :
+    rawOkres === 'this_month' ? 'this_month' :
+    rawOkres === 'prev_month' ? 'prev_month' :
     rawOkres === 'custom' ? 'custom' :
     'this_week';
 

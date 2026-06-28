@@ -121,6 +121,8 @@ const PERIOD_OPTIONS: { label: string; value: PeriodKey }[] = [
   { label: 'Dzis', value: 'today' },
   { label: 'Ten tydzien', value: 'this_week' },
   { label: 'Poprzedni tydzien', value: 'last_week' },
+  { label: 'Ten miesiac', value: 'this_month' },
+  { label: 'Poprzedni miesiac', value: 'prev_month' },
   { label: 'Niestandardowy', value: 'custom' },
 ];
 

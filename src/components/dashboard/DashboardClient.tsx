@@ -20,7 +20,7 @@ import {
 
 // ── Public types (imported by the server page) ────────────────────────────────
 
-export type Period = 'month' | 'quarter' | 'year' | 'all';
+export type Period = 'month' | 'prev_month' | 'quarter' | 'year' | 'all';
 
 export type DashboardData = {
   redProjects: {
@@ -36,6 +36,7 @@ export type DashboardData = {
     }[];
   };
   workload: { id: string; name: string; active_count: number }[];
+  freelancerProjectCount: number;
   stagesOverview: { stage_name: string; position: number; project_count: number }[];
   points: {
     total: number;
@@ -63,6 +64,7 @@ type Props = {
 
 const PERIOD_OPTIONS = [
   { label: 'Ten miesiac', value: 'month' as Period, param: '' },
+  { label: 'Poprzedni miesiac', value: 'prev_month' as Period, param: 'poprzedni_miesiac' },
   { label: 'Ten kwartal', value: 'quarter' as Period, param: 'kwartal' },
   { label: 'Ten rok', value: 'year' as Period, param: 'rok' },
   { label: 'Wszystko', value: 'all' as Period, param: 'wszystko' },
@@ -70,6 +72,7 @@ const PERIOD_OPTIONS = [
 
 const PERIOD_LABEL: Record<Period, string> = {
   month: 'Ten miesiac',
+  prev_month: 'Poprzedni miesiac',
   quarter: 'Ten kwartal',
   year: 'Ten rok',
   all: 'Wszystko',
@@ -98,7 +101,7 @@ function pluralProjekty(n: number): string {
 
 export default function DashboardClient({ initialData, period }: Props) {
   const router = useRouter();
-  const { redProjects, workload, stagesOverview, points, performance, split, funnelTotals } = initialData;
+  const { redProjects, workload, freelancerProjectCount, stagesOverview, points, performance, split, funnelTotals } = initialData;
   const [splitView, setSplitView] = useState<'types' | 'statuses'>('types');
 
   function handlePeriod(param: string) {
@@ -197,37 +200,51 @@ export default function DashboardClient({ initialData, period }: Props) {
         <div className={CARD}>
           <h3 className={`${H3} mb-1`}>Workload zespolu</h3>
           <p className="text-xs text-gray-500 mb-4">Aktywne projekty per rekruter</p>
-          {workload.length === 0 ? (
+          {workload.length === 0 && freelancerProjectCount === 0 ? (
             <p className="text-sm text-gray-400 text-center py-4">Brak danych</p>
           ) : (
-            <ResponsiveContainer width="100%" height={Math.max(150, workload.length * 36)}>
-              <BarChart
-                layout="vertical"
-                data={workload}
-                margin={{ top: 0, right: 40, bottom: 0, left: 0 }}
-              >
-                <XAxis type="number" hide />
-                <YAxis
-                  type="category"
-                  dataKey="name"
-                  width={110}
-                  tick={{ fontSize: 12 }}
-                  axisLine={false}
-                  tickLine={false}
-                />
-                <Tooltip
-                  {...TOOLTIP_STYLE}
-                  formatter={(value) => [`${value} projektow`, '']}
-                />
-                <Bar dataKey="active_count" fill="#FF5A3C" radius={[0, 4, 4, 0]}>
-                  <LabelList
-                    dataKey="active_count"
-                    position="right"
-                    style={{ fill: '#374151', fontSize: 12, fontWeight: 600 }}
-                  />
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
+            (() => {
+              const workloadData = [
+                ...workload,
+                { id: '__freelancers__', name: 'Freelancerzy', active_count: freelancerProjectCount },
+              ];
+              return (
+                <ResponsiveContainer width="100%" height={Math.max(150, workloadData.length * 36)}>
+                  <BarChart
+                    layout="vertical"
+                    data={workloadData}
+                    margin={{ top: 0, right: 40, bottom: 0, left: 0 }}
+                  >
+                    <XAxis type="number" hide />
+                    <YAxis
+                      type="category"
+                      dataKey="name"
+                      width={110}
+                      tick={{ fontSize: 12 }}
+                      axisLine={false}
+                      tickLine={false}
+                    />
+                    <Tooltip
+                      {...TOOLTIP_STYLE}
+                      formatter={(value) => [`${value} projektow`, '']}
+                    />
+                    <Bar dataKey="active_count" radius={[0, 4, 4, 0]}>
+                      {workloadData.map((entry) => (
+                        <Cell
+                          key={entry.id}
+                          fill={entry.id === '__freelancers__' ? '#3B82F6' : '#FF5A3C'}
+                        />
+                      ))}
+                      <LabelList
+                        dataKey="active_count"
+                        position="right"
+                        style={{ fill: '#374151', fontSize: 12, fontWeight: 600 }}
+                      />
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              );
+            })()
           )}
         </div>
 

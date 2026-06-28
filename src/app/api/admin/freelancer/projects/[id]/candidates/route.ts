@@ -7,11 +7,7 @@ type RouteContext = { params: Promise<{ id: string }> };
 
 export async function GET(_req: NextRequest, { params }: RouteContext) {
   try {
-    const session = await requireSession();
-
-    if (session.role !== 'admin') {
-      return NextResponse.json({ ok: false, error: 'Brak uprawnien' }, { status: 403 });
-    }
+    await requireSession();
 
     const { id } = await params;
     if (!UUID_RE.test(id)) {

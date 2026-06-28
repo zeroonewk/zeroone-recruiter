@@ -1,4 +1,4 @@
-export type PeriodKey = 'today' | 'this_week' | 'last_week' | 'custom';
+export type PeriodKey = 'today' | 'this_week' | 'last_week' | 'this_month' | 'prev_month' | 'custom';
 
 export type DateRange = { start: string; end: string }; // YYYY-MM-DD
 
@@ -32,6 +32,20 @@ export function getDateRange(period: PeriodKey, customStart?: string, customEnd?
     };
   }
 
+  if (period === 'this_month') {
+    const firstOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+    return { start: firstOfMonth.toISOString().slice(0, 10), end: todayStr };
+  }
+
+  if (period === 'prev_month') {
+    const firstOfPrevMonth = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+    const lastOfPrevMonth = new Date(today.getFullYear(), today.getMonth(), 0);
+    return {
+      start: firstOfPrevMonth.toISOString().slice(0, 10),
+      end: lastOfPrevMonth.toISOString().slice(0, 10),
+    };
+  }
+
   // custom
   const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
   const sevenDaysAgo = new Date(today);
@@ -56,6 +70,26 @@ export function getComparisonRange(period: PeriodKey, currentRange: DateRange): 
     yesterday.setUTCDate(start.getUTCDate() - 1);
     const yStr = yesterday.toISOString().slice(0, 10);
     return { start: yStr, end: yStr };
+  }
+
+  if (period === 'this_month') {
+    const start = new Date(currentRange.start + 'T00:00:00Z');
+    const prevMonthStart = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() - 1, 1));
+    const prevMonthEnd = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), 0));
+    return {
+      start: prevMonthStart.toISOString().slice(0, 10),
+      end: prevMonthEnd.toISOString().slice(0, 10),
+    };
+  }
+
+  if (period === 'prev_month') {
+    const start = new Date(currentRange.start + 'T00:00:00Z');
+    const twoMonthsAgoStart = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() - 1, 1));
+    const twoMonthsAgoEnd = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), 0));
+    return {
+      start: twoMonthsAgoStart.toISOString().slice(0, 10),
+      end: twoMonthsAgoEnd.toISOString().slice(0, 10),
+    };
   }
 
   if (period === 'this_week' || period === 'last_week') {

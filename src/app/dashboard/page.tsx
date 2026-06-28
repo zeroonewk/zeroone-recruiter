@@ -45,9 +45,10 @@ export default async function DashboardPage({
     okres === 'kwartal' ? 'quarter' :
     okres === 'rok' ? 'year' :
     okres === 'wszystko' ? 'all' :
+    okres === 'poprzedni_miesiac' ? 'prev_month' :
     'month';
 
-  const truncUnit = period !== 'all' ? period : null;
+  const truncUnit = (period !== 'all' && period !== 'prev_month') ? period : null;
 
   // ── Period-dependent query groups ──────────────────────────────────────────
 
@@ -70,6 +71,30 @@ export default async function DashboardPage({
            ORDER BY points DESC
            LIMIT 10`,
           [truncUnit]
+        ),
+      ])
+    : period === 'prev_month'
+    ? Promise.all([
+        sql.query(
+          `SELECT (COALESCE(SUM(points), 0))::int AS total
+           FROM point_transactions
+           WHERE awarded_at >= date_trunc('month', NOW() - INTERVAL '1 month')
+             AND awarded_at < date_trunc('month', NOW())`,
+          []
+        ),
+        sql.query(
+          `SELECT u.id, u.name, (COALESCE(SUM(pt.points), 0))::int AS points
+           FROM users u
+           LEFT JOIN point_transactions pt
+             ON pt.user_id = u.id
+             AND pt.awarded_at >= date_trunc('month', NOW() - INTERVAL '1 month')
+             AND pt.awarded_at < date_trunc('month', NOW())
+           WHERE u.is_active = TRUE
+           GROUP BY u.id, u.name
+           HAVING (COALESCE(SUM(pt.points), 0)) > 0
+           ORDER BY points DESC
+           LIMIT 10`,
+          []
         ),
       ])
     : Promise.all([
@@ -106,6 +131,28 @@ export default async function DashboardPage({
           [truncUnit]
         ),
       ])
+    : period === 'prev_month'
+    ? Promise.all([
+        sql.query(
+          `SELECT AVG(p.closed_at - p.opened_at)::int AS avg_days
+           FROM projects p
+           JOIN result_statuses rs ON rs.id = p.status_id
+           WHERE p.closed_at IS NOT NULL AND rs.is_success = TRUE
+             AND p.closed_at >= date_trunc('month', NOW() - INTERVAL '1 month')
+             AND p.closed_at < date_trunc('month', NOW())`,
+          []
+        ),
+        sql.query(
+          `SELECT (COUNT(*) FILTER (WHERE rs.is_success = TRUE))::int AS success,
+                  (COUNT(*))::int AS total
+           FROM projects p
+           JOIN result_statuses rs ON rs.id = p.status_id
+           WHERE p.closed_at IS NOT NULL
+             AND p.closed_at >= date_trunc('month', NOW() - INTERVAL '1 month')
+             AND p.closed_at < date_trunc('month', NOW())`,
+          []
+        ),
+      ])
     : Promise.all([
         sql`
           SELECT AVG(p.closed_at - p.opened_at)::int AS avg_days
@@ -133,6 +180,7 @@ export default async function DashboardPage({
     splitResult,
     activeTotalRaw,
     funnelTotalsRaw,
+    freelancerCountRaw,
   ] = await Promise.all([
     // Red (overdue) projects — top 100 for counting, top 3 for display
     // Shows the most-overdue open stage per project (any stage, not just first by position)
@@ -233,6 +281,15 @@ export default async function DashboardPage({
       JOIN result_statuses rs ON rs.id = p.status_id
       WHERE p.is_archived = FALSE AND rs.is_success = FALSE
     `,
+    // Freelancer project count: active projects with at least one freelancer assigned
+    sql`
+      SELECT COUNT(DISTINCT p.id)::int AS count
+      FROM projects p
+      JOIN result_statuses rs ON rs.id = p.status_id
+      WHERE p.closed_at IS NULL
+        AND rs.is_success = FALSE
+        AND EXISTS (SELECT 1 FROM project_freelancers pf WHERE pf.project_id = p.id)
+    `,
   ]);
 
   // ── Process results ────────────────────────────────────────────────────────
@@ -261,10 +318,12 @@ export default async function DashboardPage({
   const splitStatusesRaw = splitResult[1] as SplitStatusRow[];
   const activeTotalRow = (activeTotalRaw as ActiveTotalRow[])[0];
   const funnelTotals = normalizeFunnel((funnelTotalsRaw as unknown[])[0]);
+  const freelancerProjectCount = ((freelancerCountRaw as { count: number }[])[0]?.count) ?? 0;
 
   const initialData: DashboardData = {
     redProjects,
     workload: workloadRaw as WorkloadRow[],
+    freelancerProjectCount,
     stagesOverview: stagesRaw as StageOverviewRow[],
     points: {
       total: ptTotalRaw[0]?.total ?? 0,

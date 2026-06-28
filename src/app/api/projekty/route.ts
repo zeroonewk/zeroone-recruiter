@@ -29,6 +29,7 @@ export type ProjectListItem = {
   current_stage_deadline: string | null;
   current_stage_position: number | null;
   is_overdue: boolean;
+  has_freelancers: boolean;
 };
 
 export async function GET(request: NextRequest) {
@@ -48,7 +49,8 @@ export async function GET(request: NextRequest) {
         cur_stage.name AS current_stage_name,
         cur_stage.deadline AS current_stage_deadline,
         cur_stage.position AS current_stage_position,
-        COALESCE(cur_stage.is_overdue, false) AS is_overdue
+        COALESCE(cur_stage.is_overdue, false) AS is_overdue,
+        EXISTS(SELECT 1 FROM project_freelancers pf WHERE pf.project_id = p.id) AS has_freelancers
       FROM projects p
       JOIN clients c ON c.id = p.client_id
       JOIN project_types pt ON pt.id = p.project_type_id
@@ -94,6 +96,7 @@ export async function GET(request: NextRequest) {
       current_stage_deadline: toDateString(r.current_stage_deadline),
       current_stage_position: (r.current_stage_position as number | null) ?? null,
       is_overdue: r.is_overdue as boolean,
+      has_freelancers: r.has_freelancers as boolean,
     }));
 
     return NextResponse.json({ ok: true, items });

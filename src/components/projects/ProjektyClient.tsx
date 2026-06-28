@@ -228,13 +228,20 @@ export default function ProjektyClient({
                       p.is_archived ? ' opacity-60' : ''
                     }`}
                   >
-                    <td className="px-4 py-3">
-                      <Link
-                        href={`/projekty/${p.id}`}
-                        className="font-medium text-gray-900 hover:text-[#FF5A3C] transition-colors"
-                      >
-                        {p.title}
-                      </Link>
+                    <td className={`px-4 py-3 border-l-2 ${p.has_freelancers ? 'border-l-[#FF5A3C]' : 'border-l-transparent'}`}>
+                      <span className="flex items-center gap-1.5">
+                        <Link
+                          href={`/projekty/${p.id}`}
+                          className="font-medium text-gray-900 hover:text-[#FF5A3C] transition-colors"
+                        >
+                          {p.title}
+                        </Link>
+                        {p.has_freelancers && (
+                          <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-[#FF5A3C] text-white text-[10px] font-bold shrink-0">
+                            F
+                          </span>
+                        )}
+                      </span>
                     </td>
                     <td className="px-4 py-3 text-gray-600">{p.client_name}</td>
                     <td className="px-4 py-3">
