@@ -29,6 +29,12 @@ type SplitTypeRow = { id: string; name: string; count: number };
 type SplitStatusRow = { id: string; name: string; color: string; count: number };
 type ActiveTotalRow = { total_points: number; total_count: number };
 
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+// SQL fragment reused across prev_month queries
+const PREV_MONTH_START = `date_trunc('month', NOW() - INTERVAL '1 month')`;
+const PREV_MONTH_END   = `date_trunc('month', NOW())`;
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default async function DashboardPage({
@@ -42,16 +48,20 @@ export default async function DashboardPage({
   const sp = await searchParams;
   const okres = typeof sp.okres === 'string' ? sp.okres : '';
   const period: Period =
-    okres === 'kwartal' ? 'quarter' :
-    okres === 'rok' ? 'year' :
-    okres === 'wszystko' ? 'all' :
+    okres === 'kwartal'           ? 'quarter'    :
+    okres === 'rok'               ? 'year'       :
+    okres === 'wszystko'          ? 'all'        :
     okres === 'poprzedni_miesiac' ? 'prev_month' :
     'month';
 
+  // date_trunc unit for month / quarter / year (not used for all / prev_month)
   const truncUnit = (period !== 'all' && period !== 'prev_month') ? period : null;
+
+  const isPrevMonth = period === 'prev_month';
 
   // ── Period-dependent query groups ──────────────────────────────────────────
 
+  // Points + ranking
   const pointsPromise = truncUnit
     ? Promise.all([
         sql.query(
@@ -73,13 +83,13 @@ export default async function DashboardPage({
           [truncUnit]
         ),
       ])
-    : period === 'prev_month'
+    : isPrevMonth
     ? Promise.all([
         sql.query(
           `SELECT (COALESCE(SUM(points), 0))::int AS total
            FROM point_transactions
-           WHERE awarded_at >= date_trunc('month', NOW() - INTERVAL '1 month')
-             AND awarded_at < date_trunc('month', NOW())`,
+           WHERE awarded_at >= ${PREV_MONTH_START}
+             AND awarded_at < ${PREV_MONTH_END}`,
           []
         ),
         sql.query(
@@ -87,8 +97,8 @@ export default async function DashboardPage({
            FROM users u
            LEFT JOIN point_transactions pt
              ON pt.user_id = u.id
-             AND pt.awarded_at >= date_trunc('month', NOW() - INTERVAL '1 month')
-             AND pt.awarded_at < date_trunc('month', NOW())
+             AND pt.awarded_at >= ${PREV_MONTH_START}
+             AND pt.awarded_at < ${PREV_MONTH_END}
            WHERE u.is_active = TRUE
            GROUP BY u.id, u.name
            HAVING (COALESCE(SUM(pt.points), 0)) > 0
@@ -111,6 +121,7 @@ export default async function DashboardPage({
         `,
       ]);
 
+  // Performance: avg days + success rate
   const perfPromise = truncUnit
     ? Promise.all([
         sql.query(
@@ -131,15 +142,15 @@ export default async function DashboardPage({
           [truncUnit]
         ),
       ])
-    : period === 'prev_month'
+    : isPrevMonth
     ? Promise.all([
         sql.query(
           `SELECT AVG(p.closed_at - p.opened_at)::int AS avg_days
            FROM projects p
            JOIN result_statuses rs ON rs.id = p.status_id
            WHERE p.closed_at IS NOT NULL AND rs.is_success = TRUE
-             AND p.closed_at >= date_trunc('month', NOW() - INTERVAL '1 month')
-             AND p.closed_at < date_trunc('month', NOW())`,
+             AND p.closed_at >= ${PREV_MONTH_START}
+             AND p.closed_at < ${PREV_MONTH_END}`,
           []
         ),
         sql.query(
@@ -148,8 +159,8 @@ export default async function DashboardPage({
            FROM projects p
            JOIN result_statuses rs ON rs.id = p.status_id
            WHERE p.closed_at IS NOT NULL
-             AND p.closed_at >= date_trunc('month', NOW() - INTERVAL '1 month')
-             AND p.closed_at < date_trunc('month', NOW())`,
+             AND p.closed_at >= ${PREV_MONTH_START}
+             AND p.closed_at < ${PREV_MONTH_END}`,
           []
         ),
       ])
@@ -169,6 +180,199 @@ export default async function DashboardPage({
         `,
       ]);
 
+  // Workload: active projects per owner
+  // prev_month: projects opened in previous month per owner
+  const workloadPromise = isPrevMonth
+    ? sql.query(
+        `SELECT u.id, u.name, COUNT(p.id)::int AS active_count
+         FROM users u
+         LEFT JOIN projects p ON p.owner_id = u.id
+           AND p.is_archived = FALSE
+           AND p.opened_at >= ${PREV_MONTH_START}
+           AND p.opened_at < ${PREV_MONTH_END}
+         WHERE u.is_active = TRUE
+         GROUP BY u.id, u.name
+         HAVING COUNT(p.id) > 0
+         ORDER BY active_count DESC`,
+        []
+      )
+    : sql`
+        SELECT u.id, u.name, COUNT(p.id)::int AS active_count
+        FROM users u
+        LEFT JOIN projects p ON p.owner_id = u.id
+          AND p.is_archived = FALSE
+          AND p.status_id IN (SELECT id FROM result_statuses WHERE is_success = FALSE)
+        WHERE u.is_active = TRUE
+        GROUP BY u.id, u.name
+        HAVING COUNT(p.id) > 0
+        ORDER BY active_count DESC
+      `;
+
+  // Stages overview: active projects per current stage
+  // prev_month: stages whose deadline fell in the previous month
+  const stagesPromise = isPrevMonth
+    ? sql.query(
+        `SELECT cur_stage.name AS stage_name, cur_stage.position, COUNT(*)::int AS project_count
+         FROM projects p
+         JOIN result_statuses rs ON rs.id = p.status_id
+         JOIN LATERAL (
+           SELECT name, position
+           FROM project_stages
+           WHERE project_id = p.id
+             AND done_at IS NULL
+             AND deadline >= ${PREV_MONTH_START}
+             AND deadline < ${PREV_MONTH_END}
+           ORDER BY position ASC
+           LIMIT 1
+         ) cur_stage ON true
+         WHERE p.is_archived = FALSE AND rs.is_success = FALSE
+         GROUP BY cur_stage.name, cur_stage.position
+         ORDER BY cur_stage.position ASC`,
+        []
+      )
+    : sql`
+        SELECT cur_stage.name AS stage_name, cur_stage.position, COUNT(*)::int AS project_count
+        FROM projects p
+        JOIN result_statuses rs ON rs.id = p.status_id
+        JOIN LATERAL (
+          SELECT name, position
+          FROM project_stages
+          WHERE project_id = p.id AND done_at IS NULL
+          ORDER BY position ASC
+          LIMIT 1
+        ) cur_stage ON true
+        WHERE p.is_archived = FALSE AND rs.is_success = FALSE
+        GROUP BY cur_stage.name, cur_stage.position
+        ORDER BY cur_stage.position ASC
+      `;
+
+  // Split: per type and per status
+  // prev_month: projects opened in previous month
+  const splitPromise = isPrevMonth
+    ? Promise.all([
+        sql.query(
+          `SELECT pt.id, pt.name, COUNT(p.id)::int AS count
+           FROM project_types pt
+           LEFT JOIN projects p ON p.project_type_id = pt.id
+             AND p.is_archived = FALSE
+             AND p.opened_at >= ${PREV_MONTH_START}
+             AND p.opened_at < ${PREV_MONTH_END}
+           WHERE pt.is_archived = FALSE
+           GROUP BY pt.id, pt.name
+           HAVING COUNT(p.id) > 0
+           ORDER BY count DESC`,
+          []
+        ),
+        sql.query(
+          `SELECT rs.id, rs.name, rs.color, COUNT(p.id)::int AS count
+           FROM result_statuses rs
+           LEFT JOIN projects p ON p.status_id = rs.id
+             AND p.is_archived = FALSE
+             AND p.opened_at >= ${PREV_MONTH_START}
+             AND p.opened_at < ${PREV_MONTH_END}
+           WHERE rs.is_archived = FALSE
+           GROUP BY rs.id, rs.name, rs.color
+           HAVING COUNT(p.id) > 0
+           ORDER BY rs.position ASC`,
+          []
+        ),
+      ])
+    : Promise.all([
+        sql`
+          SELECT pt.id, pt.name, COUNT(p.id)::int AS count
+          FROM project_types pt
+          LEFT JOIN projects p ON p.project_type_id = pt.id AND p.is_archived = FALSE
+          WHERE pt.is_archived = FALSE
+          GROUP BY pt.id, pt.name
+          HAVING COUNT(p.id) > 0
+          ORDER BY count DESC
+        `,
+        sql`
+          SELECT rs.id, rs.name, rs.color, COUNT(p.id)::int AS count
+          FROM result_statuses rs
+          LEFT JOIN projects p ON p.status_id = rs.id AND p.is_archived = FALSE
+          WHERE rs.is_archived = FALSE
+          GROUP BY rs.id, rs.name, rs.color
+          HAVING COUNT(p.id) > 0
+          ORDER BY rs.position ASC
+        `,
+      ]);
+
+  // Active pipeline totals
+  // prev_month: projects opened in previous month
+  const activeTotalPromise = isPrevMonth
+    ? sql.query(
+        `SELECT
+           COALESCE(SUM(p.points), 0)::int AS total_points,
+           COUNT(p.id)::int AS total_count
+         FROM projects p
+         WHERE p.is_archived = FALSE
+           AND p.opened_at >= ${PREV_MONTH_START}
+           AND p.opened_at < ${PREV_MONTH_END}`,
+        []
+      )
+    : sql`
+        SELECT
+          COALESCE(SUM(p.points), 0)::int AS total_points,
+          COUNT(p.id)::int AS total_count
+        FROM projects p
+        JOIN result_statuses rs ON rs.id = p.status_id
+        WHERE p.is_archived = FALSE AND rs.is_success = FALSE
+      `;
+
+  // Funnel totals
+  // prev_month: projects opened in previous month
+  const funnelPromise = isPrevMonth
+    ? sql.query(
+        `SELECT
+           COALESCE(SUM((funnel->>'sourcing')::int), 0)::int AS sourcing,
+           COALESCE(SUM((funnel->>'screening')::int), 0)::int AS screening,
+           COALESCE(SUM((funnel->>'weryfikacja')::int), 0)::int AS weryfikacja,
+           COALESCE(SUM((funnel->>'rekomendacje')::int), 0)::int AS rekomendacje,
+           COALESCE(SUM((funnel->>'spotkania')::int), 0)::int AS spotkania,
+           COALESCE(SUM((funnel->>'oferta')::int), 0)::int AS oferta,
+           COALESCE(SUM((funnel->>'zatrudnienie')::int), 0)::int AS zatrudnienie
+         FROM projects p
+         WHERE p.is_archived = FALSE
+           AND p.opened_at >= ${PREV_MONTH_START}
+           AND p.opened_at < ${PREV_MONTH_END}`,
+        []
+      )
+    : sql`
+        SELECT
+          COALESCE(SUM((funnel->>'sourcing')::int), 0)::int AS sourcing,
+          COALESCE(SUM((funnel->>'screening')::int), 0)::int AS screening,
+          COALESCE(SUM((funnel->>'weryfikacja')::int), 0)::int AS weryfikacja,
+          COALESCE(SUM((funnel->>'rekomendacje')::int), 0)::int AS rekomendacje,
+          COALESCE(SUM((funnel->>'spotkania')::int), 0)::int AS spotkania,
+          COALESCE(SUM((funnel->>'oferta')::int), 0)::int AS oferta,
+          COALESCE(SUM((funnel->>'zatrudnienie')::int), 0)::int AS zatrudnienie
+        FROM projects p
+        JOIN result_statuses rs ON rs.id = p.status_id
+        WHERE p.is_archived = FALSE AND rs.is_success = FALSE
+      `;
+
+  // Freelancer project count
+  // prev_month: projects opened in previous month with at least one freelancer
+  const freelancerCountPromise = isPrevMonth
+    ? sql.query(
+        `SELECT COUNT(DISTINCT p.id)::int AS count
+         FROM projects p
+         WHERE p.is_archived = FALSE
+           AND p.opened_at >= ${PREV_MONTH_START}
+           AND p.opened_at < ${PREV_MONTH_END}
+           AND EXISTS (SELECT 1 FROM project_freelancers pf WHERE pf.project_id = p.id)`,
+        []
+      )
+    : sql`
+        SELECT COUNT(DISTINCT p.id)::int AS count
+        FROM projects p
+        JOIN result_statuses rs ON rs.id = p.status_id
+        WHERE p.closed_at IS NULL
+          AND rs.is_success = FALSE
+          AND EXISTS (SELECT 1 FROM project_freelancers pf WHERE pf.project_id = p.id)
+      `;
+
   // ── Outer Promise.all ──────────────────────────────────────────────────────
 
   const [
@@ -182,8 +386,7 @@ export default async function DashboardPage({
     funnelTotalsRaw,
     freelancerCountRaw,
   ] = await Promise.all([
-    // Red (overdue) projects — top 100 for counting, top 3 for display
-    // Shows the most-overdue open stage per project (any stage, not just first by position)
+    // Red (overdue) projects — operational, always current state
     sql`
       SELECT
         p.id, p.title, c.name AS client_name, u.name AS owner_name,
@@ -207,89 +410,14 @@ export default async function DashboardPage({
       ORDER BY cur_stage.deadline ASC
       LIMIT 100
     `,
-    // Workload: active projects per owner
-    sql`
-      SELECT u.id, u.name, COUNT(p.id)::int AS active_count
-      FROM users u
-      LEFT JOIN projects p ON p.owner_id = u.id
-        AND p.is_archived = FALSE
-        AND p.status_id IN (SELECT id FROM result_statuses WHERE is_success = FALSE)
-      WHERE u.is_active = TRUE
-      GROUP BY u.id, u.name
-      HAVING COUNT(p.id) > 0
-      ORDER BY active_count DESC
-    `,
-    // Stages overview: active projects per current stage
-    sql`
-      SELECT cur_stage.name AS stage_name, cur_stage.position, COUNT(*)::int AS project_count
-      FROM projects p
-      JOIN result_statuses rs ON rs.id = p.status_id
-      JOIN LATERAL (
-        SELECT name, position
-        FROM project_stages
-        WHERE project_id = p.id AND done_at IS NULL
-        ORDER BY position ASC
-        LIMIT 1
-      ) cur_stage ON true
-      WHERE p.is_archived = FALSE AND rs.is_success = FALSE
-      GROUP BY cur_stage.name, cur_stage.position
-      ORDER BY cur_stage.position ASC
-    `,
+    workloadPromise,
+    stagesPromise,
     pointsPromise,
     perfPromise,
-    // Split: per type and per status
-    Promise.all([
-      sql`
-        SELECT pt.id, pt.name, COUNT(p.id)::int AS count
-        FROM project_types pt
-        LEFT JOIN projects p ON p.project_type_id = pt.id AND p.is_archived = FALSE
-        WHERE pt.is_archived = FALSE
-        GROUP BY pt.id, pt.name
-        HAVING COUNT(p.id) > 0
-        ORDER BY count DESC
-      `,
-      sql`
-        SELECT rs.id, rs.name, rs.color, COUNT(p.id)::int AS count
-        FROM result_statuses rs
-        LEFT JOIN projects p ON p.status_id = rs.id AND p.is_archived = FALSE
-        WHERE rs.is_archived = FALSE
-        GROUP BY rs.id, rs.name, rs.color
-        HAVING COUNT(p.id) > 0
-        ORDER BY rs.position ASC
-      `,
-    ]),
-    // Active pipeline totals (period-independent)
-    sql`
-      SELECT
-        COALESCE(SUM(p.points), 0)::int AS total_points,
-        COUNT(p.id)::int AS total_count
-      FROM projects p
-      JOIN result_statuses rs ON rs.id = p.status_id
-      WHERE p.is_archived = FALSE AND rs.is_success = FALSE
-    `,
-    // Funnel totals across all active projects
-    sql`
-      SELECT
-        COALESCE(SUM((funnel->>'sourcing')::int), 0)::int AS sourcing,
-        COALESCE(SUM((funnel->>'screening')::int), 0)::int AS screening,
-        COALESCE(SUM((funnel->>'weryfikacja')::int), 0)::int AS weryfikacja,
-        COALESCE(SUM((funnel->>'rekomendacje')::int), 0)::int AS rekomendacje,
-        COALESCE(SUM((funnel->>'spotkania')::int), 0)::int AS spotkania,
-        COALESCE(SUM((funnel->>'oferta')::int), 0)::int AS oferta,
-        COALESCE(SUM((funnel->>'zatrudnienie')::int), 0)::int AS zatrudnienie
-      FROM projects p
-      JOIN result_statuses rs ON rs.id = p.status_id
-      WHERE p.is_archived = FALSE AND rs.is_success = FALSE
-    `,
-    // Freelancer project count: active projects with at least one freelancer assigned
-    sql`
-      SELECT COUNT(DISTINCT p.id)::int AS count
-      FROM projects p
-      JOIN result_statuses rs ON rs.id = p.status_id
-      WHERE p.closed_at IS NULL
-        AND rs.is_success = FALSE
-        AND EXISTS (SELECT 1 FROM project_freelancers pf WHERE pf.project_id = p.id)
-    `,
+    splitPromise,
+    activeTotalPromise,
+    funnelPromise,
+    freelancerCountPromise,
   ]);
 
   // ── Process results ────────────────────────────────────────────────────────
