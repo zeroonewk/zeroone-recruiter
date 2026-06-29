@@ -118,7 +118,7 @@ export default async function ProjektDetailPage({
     notes: raw.notes,
     links: Array.isArray(raw.links) ? (raw.links as { label: string; url: string }[]) : [],
     opened_at: toDateString(raw.opened_at) ?? '',
-    closed_at: toDateString(raw.closed_at),
+    closed_at: raw.closed_at ? toDateString(raw.closed_at) : null,
     is_archived: raw.is_archived,
     disable_stages: raw.disable_stages,
     funnel: normalizeFunnel(raw.funnel),
