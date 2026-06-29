@@ -498,6 +498,26 @@ export default function ProjektEdycjaClient({
 
   // ── Archive handler ───────────────────────────────────────────────────────
 
+  async function handleRevert() {
+    if (
+      !confirm(
+        'Czy na pewno chcesz cofnac projekt do statusu Aktywny? Transakcje punktow i wyplaty dla freelancerow zostana usuniete.'
+      )
+    )
+      return;
+    try {
+      const res = await fetch(`/api/projekty/${project.id}/cofnij`, { method: 'POST' });
+      const data = (await res.json()) as { ok: boolean; error?: string };
+      if (data.ok) {
+        router.refresh();
+      } else {
+        showToast('error', data.error ?? 'Blad serwera');
+      }
+    } catch {
+      showToast('error', 'Blad polaczenia z serwerem');
+    }
+  }
+
   async function handleArchive(archive: boolean) {
     const msg = archive
       ? 'Zarchiwizowac projekt? Bedzie ukryty z domyslnej listy.'
@@ -974,23 +994,34 @@ export default function ProjektEdycjaClient({
 
           <div className={cardCls}>
             <h2 className={h2Cls}>Akcje</h2>
-            {project.is_archived ? (
-              <button
-                type="button"
-                onClick={() => void handleArchive(false)}
-                className="px-4 py-2 text-sm border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors"
-              >
-                Przywroc projekt
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={() => void handleArchive(true)}
-                className="px-4 py-2 text-sm border border-red-300 text-red-600 rounded-md hover:bg-red-50 transition-colors"
-              >
-                Archiwizuj projekt
-              </button>
-            )}
+            <div className="flex flex-wrap gap-2">
+              {currentUserRole === 'admin' && project.closed_at !== null && (
+                <button
+                  type="button"
+                  onClick={() => void handleRevert()}
+                  className="px-4 py-2 text-sm bg-gray-100 hover:bg-gray-200 text-gray-700 border border-gray-300 rounded-md transition-colors"
+                >
+                  Cofnij do Aktywnego
+                </button>
+              )}
+              {project.is_archived ? (
+                <button
+                  type="button"
+                  onClick={() => void handleArchive(false)}
+                  className="px-4 py-2 text-sm border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors"
+                >
+                  Przywroc projekt
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => void handleArchive(true)}
+                  className="px-4 py-2 text-sm border border-red-300 text-red-600 rounded-md hover:bg-red-50 transition-colors"
+                >
+                  Archiwizuj projekt
+                </button>
+              )}
+            </div>
           </div>
         </div>
       </div>
