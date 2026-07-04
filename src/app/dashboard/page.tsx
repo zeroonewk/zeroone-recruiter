@@ -19,7 +19,7 @@ type RedProjectRaw = {
   days_overdue: number;
 };
 
-type WorkloadRow = { id: string; name: string; active_count: number };
+type WorkloadRow = { id: string; name: string; active_count: number; priority_count: number };
 type StageOverviewRow = { stage_name: string; position: number; project_count: number };
 type PointTotalRow = { total: number };
 type PointRankingRow = { id: string; name: string; points: number };
@@ -27,6 +27,7 @@ type PerfAvgRow = { avg_days: number | null };
 type PerfCountRow = { success: number; total: number };
 type SplitTypeRow = { id: string; name: string; count: number };
 type SplitStatusRow = { id: string; name: string; color: string; count: number };
+type SplitPriorityRow = { id: string; name: string; color: string; count: number; points: number };
 type ActiveTotalRow = { total_points: number; total_count: number };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -180,16 +181,20 @@ export default async function DashboardPage({
         `,
       ]);
 
-  // Workload: active projects per owner
+  // Workload: active projects per owner (with priority count)
   // prev_month: projects opened in previous month per owner
   const workloadPromise = isPrevMonth
     ? sql.query(
-        `SELECT u.id, u.name, COUNT(p.id)::int AS active_count
+        `SELECT u.id, u.name,
+           COUNT(p.id)::int AS active_count,
+           (COUNT(p.id) FILTER (WHERE c.priority_class * pt.priority_class <= 2))::int AS priority_count
          FROM users u
          LEFT JOIN projects p ON p.owner_id = u.id
            AND p.is_archived = FALSE
            AND p.opened_at >= ${PREV_MONTH_START}
            AND p.opened_at < ${PREV_MONTH_END}
+         LEFT JOIN clients c ON c.id = p.client_id
+         LEFT JOIN project_types pt ON pt.id = p.project_type_id
          WHERE u.is_active = TRUE
          GROUP BY u.id, u.name
          HAVING COUNT(p.id) > 0
@@ -197,11 +202,15 @@ export default async function DashboardPage({
         []
       )
     : sql`
-        SELECT u.id, u.name, COUNT(p.id)::int AS active_count
+        SELECT u.id, u.name,
+          COUNT(p.id)::int AS active_count,
+          (COUNT(p.id) FILTER (WHERE c.priority_class * pt.priority_class <= 2))::int AS priority_count
         FROM users u
         LEFT JOIN projects p ON p.owner_id = u.id
           AND p.is_archived = FALSE
           AND p.status_id IN (SELECT id FROM result_statuses WHERE is_success = FALSE)
+        LEFT JOIN clients c ON c.id = p.client_id
+        LEFT JOIN project_types pt ON pt.id = p.project_type_id
         WHERE u.is_active = TRUE
         GROUP BY u.id, u.name
         HAVING COUNT(p.id) > 0
@@ -298,6 +307,41 @@ export default async function DashboardPage({
         `,
       ]);
 
+  // Priority split: active priority projects (score <= 2) grouped by status
+  const prioritySplitPromise = isPrevMonth
+    ? sql.query(
+        `SELECT rs.id, rs.name, rs.color,
+           COUNT(p.id)::int AS count,
+           COALESCE(SUM(p.points), 0)::int AS points
+         FROM result_statuses rs
+         JOIN projects p ON p.status_id = rs.id AND p.is_archived = FALSE
+         JOIN clients c ON c.id = p.client_id
+         JOIN project_types pt ON pt.id = p.project_type_id
+         WHERE rs.is_archived = FALSE
+           AND p.opened_at >= ${PREV_MONTH_START}
+           AND p.opened_at < ${PREV_MONTH_END}
+           AND (c.priority_class * pt.priority_class) <= 2
+         GROUP BY rs.id, rs.name, rs.color, rs.position
+         HAVING COUNT(p.id) > 0
+         ORDER BY rs.position ASC`,
+        []
+      )
+    : sql`
+        SELECT rs.id, rs.name, rs.color,
+          COUNT(p.id)::int AS count,
+          COALESCE(SUM(p.points), 0)::int AS points
+        FROM result_statuses rs
+        JOIN projects p ON p.status_id = rs.id AND p.is_archived = FALSE
+        JOIN clients c ON c.id = p.client_id
+        JOIN project_types pt ON pt.id = p.project_type_id
+        WHERE rs.is_archived = FALSE
+          AND rs.is_success = FALSE
+          AND (c.priority_class * pt.priority_class) <= 2
+        GROUP BY rs.id, rs.name, rs.color, rs.position
+        HAVING COUNT(p.id) > 0
+        ORDER BY rs.position ASC
+      `;
+
   // Active pipeline totals
   // prev_month: projects opened in previous month
   const activeTotalPromise = isPrevMonth
@@ -385,6 +429,7 @@ export default async function DashboardPage({
     activeTotalRaw,
     funnelTotalsRaw,
     freelancerCountRaw,
+    prioritySplitRaw,
   ] = await Promise.all([
     // Red (overdue) projects — operational, always current state
     sql`
@@ -418,6 +463,7 @@ export default async function DashboardPage({
     activeTotalPromise,
     funnelPromise,
     freelancerCountPromise,
+    prioritySplitPromise,
   ]);
 
   // ── Process results ────────────────────────────────────────────────────────
@@ -447,6 +493,8 @@ export default async function DashboardPage({
   const activeTotalRow = (activeTotalRaw as ActiveTotalRow[])[0];
   const funnelTotals = normalizeFunnel((funnelTotalsRaw as unknown[])[0]);
   const freelancerProjectCount = ((freelancerCountRaw as { count: number }[])[0]?.count) ?? 0;
+  const prioritySplitRows = prioritySplitRaw as SplitPriorityRow[];
+  const priorityTotalPoints = prioritySplitRows.reduce((s, r) => s + r.points, 0);
 
   const initialData: DashboardData = {
     redProjects,
@@ -469,6 +517,8 @@ export default async function DashboardPage({
         points: activeTotalRow?.total_points ?? 0,
         count: activeTotalRow?.total_count ?? 0,
       },
+      priority_statuses: prioritySplitRows,
+      priority_total_points: priorityTotalPoints,
     },
     funnelTotals,
   };

@@ -35,7 +35,7 @@ export type DashboardData = {
       days_overdue: number;
     }[];
   };
-  workload: { id: string; name: string; active_count: number }[];
+  workload: { id: string; name: string; active_count: number; priority_count: number }[];
   freelancerProjectCount: number;
   stagesOverview: { stage_name: string; position: number; project_count: number }[];
   points: {
@@ -51,6 +51,8 @@ export type DashboardData = {
     types: { id: string; name: string; count: number }[];
     statuses: { id: string; name: string; color: string; count: number }[];
     active_total: { points: number; count: number };
+    priority_statuses: { id: string; name: string; color: string; count: number; points: number }[];
+    priority_total_points: number;
   };
   funnelTotals: FunnelData;
 };
@@ -206,43 +208,55 @@ export default function DashboardClient({ initialData, period }: Props) {
             (() => {
               const workloadData = [
                 ...workload,
-                { id: '__freelancers__', name: 'Freelancerzy', active_count: freelancerProjectCount },
-              ];
+                { id: '__freelancers__', name: 'Freelancerzy', active_count: freelancerProjectCount, priority_count: 0 },
+              ].filter((d) => d.active_count > 0);
+              const max = Math.max(...workloadData.map((d) => d.active_count), 1);
               return (
-                <ResponsiveContainer width="100%" height={Math.max(150, workloadData.length * 36)}>
-                  <BarChart
-                    layout="vertical"
-                    data={workloadData}
-                    margin={{ top: 0, right: 40, bottom: 0, left: 0 }}
-                  >
-                    <XAxis type="number" hide />
-                    <YAxis
-                      type="category"
-                      dataKey="name"
-                      width={110}
-                      tick={{ fontSize: 12 }}
-                      axisLine={false}
-                      tickLine={false}
-                    />
-                    <Tooltip
-                      {...TOOLTIP_STYLE}
-                      formatter={(value) => [`${value} projektow`, '']}
-                    />
-                    <Bar dataKey="active_count" radius={[0, 4, 4, 0]}>
-                      {workloadData.map((entry) => (
-                        <Cell
-                          key={entry.id}
-                          fill={entry.id === '__freelancers__' ? '#3B82F6' : '#FF5A3C'}
-                        />
-                      ))}
-                      <LabelList
-                        dataKey="active_count"
-                        position="right"
-                        style={{ fill: '#374151', fontSize: 12, fontWeight: 600 }}
-                      />
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
+                <div>
+                  <div className="space-y-2">
+                    {workloadData.map((entry) => {
+                      const total = entry.active_count;
+                      const priority = entry.id === '__freelancers__' ? 0 : entry.priority_count;
+                      const others = total - priority;
+                      return (
+                        <div key={entry.id} className="flex items-center gap-2 text-sm">
+                          <span className="w-24 truncate text-xs text-gray-700 shrink-0 text-right">{entry.name}</span>
+                          <div className="flex-1 bg-gray-100 rounded-sm h-5 overflow-hidden">
+                            <div
+                              className="h-full flex"
+                              style={{ width: `${(total / max) * 100}%` }}
+                            >
+                              {priority > 0 && (
+                                <div
+                                  className="bg-green-500 h-full"
+                                  style={{ width: `${(priority / total) * 100}%` }}
+                                />
+                              )}
+                              <div
+                                className="h-full"
+                                style={{
+                                  width: `${(others / total) * 100}%`,
+                                  backgroundColor: entry.id === '__freelancers__' ? '#3B82F6' : '#FF5A3C',
+                                }}
+                              />
+                            </div>
+                          </div>
+                          <span className="text-xs font-semibold text-gray-700 w-4 text-right shrink-0">{total}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div className="flex items-center gap-4 mt-3 pt-2 border-t border-gray-100">
+                    <div className="flex items-center gap-1.5 text-xs text-gray-600">
+                      <span className="w-3 h-3 rounded-sm bg-green-500 shrink-0" />
+                      Priorytetowe (score 1-2)
+                    </div>
+                    <div className="flex items-center gap-1.5 text-xs text-gray-600">
+                      <span className="w-3 h-3 rounded-sm bg-[#FF5A3C] shrink-0" />
+                      Pozostale
+                    </div>
+                  </div>
+                </div>
               );
             })()
           )}
@@ -335,46 +349,87 @@ export default function DashboardClient({ initialData, period }: Props) {
             </div>
           )}
 
-          {(() => {
-            const data = splitView === 'types' ? split.types : split.statuses;
-            if (data.length === 0) {
-              return (
-                <p className="text-sm text-gray-400 text-center py-6">Brak danych</p>
-              );
-            }
-            return (
-              <ResponsiveContainer width="100%" height={240}>
-                <PieChart>
-                  <Pie
-                    data={data}
-                    dataKey="count"
-                    nameKey="name"
-                    cx="50%"
-                    cy="50%"
-                    outerRadius={80}
-                    label={({ value }: { value: number }) => value}
-                    labelLine={false}
-                  >
-                    {data.map((entry, idx) => (
-                      <Cell
-                        key={entry.id}
-                        fill={
-                          'color' in entry
-                            ? (entry as { color: string }).color
-                            : PIE_PALETTE[idx % PIE_PALETTE.length]
-                        }
+          <div className="grid grid-cols-2 gap-4">
+            {/* Left: types / statuses split */}
+            <div>
+              {(() => {
+                const data = splitView === 'types' ? split.types : split.statuses;
+                if (data.length === 0) {
+                  return <p className="text-sm text-gray-400 text-center py-6">Brak danych</p>;
+                }
+                return (
+                  <ResponsiveContainer width="100%" height={240}>
+                    <PieChart>
+                      <Pie
+                        data={data}
+                        dataKey="count"
+                        nameKey="name"
+                        cx="50%"
+                        cy="50%"
+                        outerRadius={75}
+                        label={({ value }: { value: number }) => value}
+                        labelLine={false}
+                      >
+                        {data.map((entry, idx) => (
+                          <Cell
+                            key={entry.id}
+                            fill={
+                              'color' in entry
+                                ? (entry as { color: string }).color
+                                : PIE_PALETTE[idx % PIE_PALETTE.length]
+                            }
+                          />
+                        ))}
+                      </Pie>
+                      <Tooltip
+                        {...TOOLTIP_STYLE}
+                        formatter={(value) => [`${value} projektow`, '']}
                       />
-                    ))}
-                  </Pie>
-                  <Tooltip
-                    {...TOOLTIP_STYLE}
-                    formatter={(value) => [`${value} projektow`, '']}
-                  />
-                  <Legend wrapperStyle={{ fontSize: '12px' }} />
-                </PieChart>
-              </ResponsiveContainer>
-            );
-          })()}
+                      <Legend wrapperStyle={{ fontSize: '12px' }} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                );
+              })()}
+            </div>
+
+            {/* Right: priority statuses split */}
+            <div>
+              <p className={`${H3} mb-3`}>Split priorytetowych</p>
+              {split.priority_statuses.length === 0 ? (
+                <p className="text-sm text-gray-400 text-center py-6">Brak projektow priorytetowych</p>
+              ) : (
+                <>
+                  <ResponsiveContainer width="100%" height={200}>
+                    <PieChart>
+                      <Pie
+                        data={split.priority_statuses}
+                        dataKey="count"
+                        nameKey="name"
+                        cx="50%"
+                        cy="50%"
+                        outerRadius={65}
+                        label={({ value }: { value: number }) => value}
+                        labelLine={false}
+                      >
+                        {split.priority_statuses.map((entry) => (
+                          <Cell key={entry.id} fill={entry.color} />
+                        ))}
+                      </Pie>
+                      <Tooltip
+                        {...TOOLTIP_STYLE}
+                        formatter={(value) => [`${value} projektow`, '']}
+                      />
+                      <Legend wrapperStyle={{ fontSize: '12px' }} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                  <p className="text-center text-xs text-gray-500 mt-1">
+                    Suma pkt:{' '}
+                    <span className="font-bold text-[#FF5A3C]">{split.priority_total_points}</span>
+                  </p>
+                </>
+              )}
+            </div>
+          </div>
         </div>
       </div>
 
