@@ -6,11 +6,12 @@ import { FUNNEL_LEVELS, pct, type FunnelData, type FunnelKey } from '@/lib/funne
 type Props = {
   projectId: string;
   initialFunnel: FunnelData;
+  weekAgoFunnel: Record<string, number> | null;
   onUpdate: (newFunnel: FunnelData) => void;
   showToast: (type: 'success' | 'error', msg: string) => void;
 };
 
-export default function FunnelCard({ projectId, initialFunnel, onUpdate, showToast }: Props) {
+export default function FunnelCard({ projectId, initialFunnel, weekAgoFunnel, onUpdate, showToast }: Props) {
   const [funnel, setFunnel] = useState<FunnelData>(initialFunnel);
   const [saving, setSaving] = useState<Partial<Record<FunnelKey, boolean>>>({});
 
@@ -43,12 +44,17 @@ export default function FunnelCard({ projectId, initialFunnel, onUpdate, showToa
   return (
     <div className="bg-white border border-gray-200 rounded-lg p-6">
       <h2 className="text-xl font-bold mb-1">Lejek procesu</h2>
-      <p className="text-sm text-gray-500 mb-6">
+      <p className="text-sm text-gray-500 mb-4">
         Aktualizuj liczby na biezaco. Konwersja liczona automatycznie.
+        {weekAgoFunnel != null && (
+          <span className="ml-2 text-xs text-blue-600 font-medium">
+            Niebieski = przyrost vs 7 dni temu
+          </span>
+        )}
       </p>
 
       {/* Header row */}
-      <div className="grid grid-cols-[minmax(0,1fr)_96px_minmax(0,2fr)_180px] gap-4 pb-2 border-b border-gray-100 mb-1">
+      <div className="grid grid-cols-[minmax(0,1fr)_96px_minmax(0,2fr)_180px] gap-4 pb-1.5 border-b border-gray-100 mb-1">
         <div className="text-xs font-medium text-gray-500 uppercase tracking-wide">Poziom</div>
         <div className="text-xs font-medium text-gray-500 uppercase tracking-wide text-right">
           Liczba
@@ -63,10 +69,13 @@ export default function FunnelCard({ projectId, initialFunnel, onUpdate, showToa
         const value = funnel[lvl.key];
         const prev = idx > 0 ? FUNNEL_LEVELS[idx - 1] : null;
         const prevValue = prev ? funnel[prev.key] : null;
-        const barWidth =
-          funnel.sourcing === 0
-            ? '0%'
-            : `${Math.min(100, (value / funnel.sourcing) * 100)}%`;
+        const base = funnel.sourcing;
+        const barWidth = base === 0 ? '0%' : `${Math.min(100, (value / base) * 100)}%`;
+
+        const weekAgo = weekAgoFunnel != null ? (weekAgoFunnel[lvl.key] ?? 0) : 0;
+        const delta = Math.max(0, value - weekAgo);
+        const weekAgoWidth = base === 0 ? '0%' : `${Math.min(100, (weekAgo / base) * 100)}%`;
+        const deltaWidth = base === 0 ? '0%' : `${Math.min(100, (delta / base) * 100)}%`;
 
         const conversionMain =
           idx === 0
@@ -78,7 +87,7 @@ export default function FunnelCard({ projectId, initialFunnel, onUpdate, showToa
         return (
           <div
             key={lvl.key}
-            className="grid grid-cols-[minmax(0,1fr)_96px_minmax(0,2fr)_180px] gap-4 items-center py-3 border-b border-gray-50 last:border-0"
+            className="grid grid-cols-[minmax(0,1fr)_96px_minmax(0,2fr)_180px] gap-4 items-center py-1.5 border-b border-gray-50 last:border-0"
           >
             {/* Column 1: Level */}
             <div>
@@ -107,12 +116,27 @@ export default function FunnelCard({ projectId, initialFunnel, onUpdate, showToa
             />
 
             {/* Column 3: Bar */}
-            <div className="w-full bg-gray-100 rounded-full h-3">
-              <div
-                className="bg-[#FF5A3C] h-3 rounded-full transition-all"
-                style={{ width: barWidth }}
-              />
-            </div>
+            {weekAgoFunnel != null ? (
+              <div className="w-full bg-gray-100 rounded-full h-2.5 flex overflow-hidden">
+                <div
+                  className="bg-[#FF5A3C] h-2.5 flex-none"
+                  style={{ width: weekAgoWidth }}
+                />
+                {delta > 0 && (
+                  <div
+                    className="bg-blue-500 h-2.5 flex-none"
+                    style={{ width: deltaWidth }}
+                  />
+                )}
+              </div>
+            ) : (
+              <div className="w-full bg-gray-100 rounded-full h-2.5">
+                <div
+                  className="bg-[#FF5A3C] h-2.5 rounded-full transition-all"
+                  style={{ width: barWidth }}
+                />
+              </div>
+            )}
 
             {/* Column 4: Conversion */}
             <div className="text-right">

@@ -62,7 +62,7 @@ export default async function ProjektDetailPage({
   const { id } = await params;
   if (!UUID_RE.test(id)) notFound();
 
-  const [projectRows, stageRows, statusRows, userRows, freelancerRows, projectFreelancerRows] = await Promise.all([
+  const [projectRows, stageRows, statusRows, userRows, freelancerRows, projectFreelancerRows, snapshotRows] = await Promise.all([
     sql`
       SELECT
         p.id, p.title, p.points, p.notes, p.links, p.opened_at, p.closed_at, p.is_archived,
@@ -95,6 +95,11 @@ export default async function ProjektDetailPage({
     sql`SELECT id, name FROM users WHERE is_active = TRUE ORDER BY name ASC`,
     sql`SELECT id, name FROM users WHERE is_external = TRUE AND is_active = TRUE ORDER BY name ASC`,
     sql`SELECT user_id FROM project_freelancers WHERE project_id = ${id}::uuid`,
+    sql`
+      SELECT funnel FROM funnel_snapshots
+      WHERE project_id = ${id}::uuid AND snapshot_date <= (CURRENT_DATE - INTERVAL '7 days')
+      ORDER BY snapshot_date DESC LIMIT 1
+    `,
   ]);
 
   if (!projectRows || projectRows.length === 0) notFound();
@@ -145,6 +150,12 @@ export default async function ProjektDetailPage({
     notes: s.notes,
   }));
 
+  const snapshotFunnel = (snapshotRows as { funnel: unknown }[])[0]?.funnel;
+  const weekAgoFunnel: Record<string, number> | null =
+    snapshotFunnel && typeof snapshotFunnel === 'object' && !Array.isArray(snapshotFunnel)
+      ? (snapshotFunnel as Record<string, number>)
+      : null;
+
   return (
     <AppShell user={{ name: session.name, email: session.email, role: session.role }}>
       <ProjektEdycjaClient
@@ -157,6 +168,7 @@ export default async function ProjektDetailPage({
         availableFreelancers={freelancerRows as { id: string; name: string }[]}
         initialFreelancerIds={(projectFreelancerRows as { user_id: string }[]).map((r) => r.user_id)}
         initialFreelancerRates={project.freelancer_rates}
+        weekAgoFunnel={weekAgoFunnel}
       />
     </AppShell>
   );

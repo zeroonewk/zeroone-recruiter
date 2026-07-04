@@ -26,6 +26,7 @@ type Props = {
   availableFreelancers: { id: string; name: string }[];
   initialFreelancerIds: string[];
   initialFreelancerRates: FreelancerRates;
+  weekAgoFunnel: Record<string, number> | null;
 };
 
 type Toast = { type: 'success' | 'error'; message: string };
@@ -62,6 +63,7 @@ export default function ProjektEdycjaClient({
   availableFreelancers,
   initialFreelancerIds,
   initialFreelancerRates,
+  weekAgoFunnel,
 }: Props) {
   const router = useRouter();
 
@@ -667,6 +669,7 @@ export default function ProjektEdycjaClient({
         <FunnelCard
           projectId={project.id}
           initialFunnel={project.funnel}
+          weekAgoFunnel={weekAgoFunnel}
           onUpdate={(newFunnel: FunnelData) => setProject((prev) => ({ ...prev, funnel: newFunnel }))}
           showToast={showToast}
         />
