@@ -2,12 +2,15 @@
 
 import { useMemo } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import Link from 'next/link';
 import { FUNNEL_LEVELS, type FunnelData } from '@/lib/funnel';
 import type { PriorityItem } from '@/app/api/priorytety/route';
+import type { Task } from '@/app/api/zadania/route';
 
 type Props = {
   initialItems: PriorityItem[];
   owners: { id: string; name: string }[];
+  tasks: Task[];
 };
 
 function PriorityBadge({ score }: { score: number }) {
@@ -54,7 +57,13 @@ function MiniFunnel({ funnel }: { funnel: FunnelData }) {
   );
 }
 
-export default function PrioryteyClient({ initialItems, owners }: Props) {
+function taskCardClass(rule_id: number): string {
+  if (rule_id === 1 || rule_id === 2 || rule_id === 4) return 'bg-red-50 border-red-200';
+  if (rule_id === 3 || rule_id === 5) return 'bg-orange-50 border-orange-200';
+  return 'bg-yellow-50 border-yellow-200';
+}
+
+export default function PrioryteyClient({ initialItems, owners, tasks }: Props) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const ownerFilter = searchParams.get('owner') ?? 'all';
@@ -75,6 +84,11 @@ export default function PrioryteyClient({ initialItems, owners }: Props) {
     return initialItems.filter((p) => p.owner_id === ownerFilter);
   }, [initialItems, ownerFilter]);
 
+  const filteredTasks = useMemo(() => {
+    if (ownerFilter === 'all') return tasks;
+    return tasks.filter((t) => t.owner_id === ownerFilter);
+  }, [tasks, ownerFilter]);
+
   return (
     <div className="max-w-7xl mx-auto px-4 py-8">
       <div className="flex items-center justify-between mb-6">
@@ -91,6 +105,44 @@ export default function PrioryteyClient({ initialItems, owners }: Props) {
             </option>
           ))}
         </select>
+      </div>
+
+      {/* Tasks section */}
+      <div className="mb-6">
+        <h2 className="text-lg font-semibold text-gray-900 mb-3">
+          Zadania dla ownerow{' '}
+          <span className="text-sm font-normal text-gray-500">({filteredTasks.length})</span>
+        </h2>
+        {filteredTasks.length === 0 ? (
+          <p className="text-sm font-medium text-green-600">Brak zadan — wszystko gra!</p>
+        ) : (
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            {filteredTasks.map((t, i) => (
+              <div
+                key={`${t.project_id}-${t.rule_id}-${i}`}
+                className={`border rounded-lg px-4 py-3 flex flex-col gap-1.5 ${taskCardClass(t.rule_id)}`}
+              >
+                <div className="flex items-start gap-2">
+                  <span className="mt-0.5 shrink-0 text-base leading-none">&#9888;</span>
+                  <p className="text-sm font-medium text-gray-900 leading-snug">{t.message}</p>
+                </div>
+                <div className="flex items-center justify-between gap-2 mt-0.5">
+                  <Link
+                    href={`/projekty/${t.project_id}`}
+                    onClick={(e) => e.stopPropagation()}
+                    className="text-xs text-[#FF5A3C] hover:underline truncate"
+                  >
+                    {t.project_title}
+                  </Link>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <span className="text-xs text-gray-500">{t.owner_name}</span>
+                    <PriorityBadge score={t.priority_score} />
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {filtered.length === 0 ? (
