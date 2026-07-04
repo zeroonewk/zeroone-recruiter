@@ -228,9 +228,11 @@ export default function DashboardClient({ initialData, period }: Props) {
                             >
                               {priority > 0 && (
                                 <div
-                                  className="bg-green-500 h-full"
+                                  className="bg-green-500 h-full flex items-center overflow-hidden"
                                   style={{ width: `${(priority / total) * 100}%` }}
-                                />
+                                >
+                                  <span className="text-xs font-bold text-white px-1 leading-none">{priority}</span>
+                                </div>
                               )}
                               <div
                                 className="h-full"
@@ -349,7 +351,7 @@ export default function DashboardClient({ initialData, period }: Props) {
             </div>
           )}
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-2 gap-6 items-start">
             {/* Left: types / statuses split */}
             <div>
               {(() => {
@@ -358,7 +360,7 @@ export default function DashboardClient({ initialData, period }: Props) {
                   return <p className="text-sm text-gray-400 text-center py-6">Brak danych</p>;
                 }
                 return (
-                  <ResponsiveContainer width="100%" height={240}>
+                  <ResponsiveContainer width="100%" height={260}>
                     <PieChart>
                       <Pie
                         data={data}
@@ -366,7 +368,7 @@ export default function DashboardClient({ initialData, period }: Props) {
                         nameKey="name"
                         cx="50%"
                         cy="50%"
-                        outerRadius={75}
+                        outerRadius={80}
                         label={({ value }: { value: number }) => value}
                         labelLine={false}
                       >
@@ -394,12 +396,12 @@ export default function DashboardClient({ initialData, period }: Props) {
 
             {/* Right: priority statuses split */}
             <div>
-              <p className={`${H3} mb-3`}>Split priorytetowych</p>
+              <h3 className={`${H3} mb-4`}>Split priorytetowych</h3>
               {split.priority_statuses.length === 0 ? (
                 <p className="text-sm text-gray-400 text-center py-6">Brak projektow priorytetowych</p>
               ) : (
                 <>
-                  <ResponsiveContainer width="100%" height={200}>
+                  <ResponsiveContainer width="100%" height={260}>
                     <PieChart>
                       <Pie
                         data={split.priority_statuses}
@@ -407,7 +409,7 @@ export default function DashboardClient({ initialData, period }: Props) {
                         nameKey="name"
                         cx="50%"
                         cy="50%"
-                        outerRadius={65}
+                        outerRadius={80}
                         label={({ value }: { value: number }) => value}
                         labelLine={false}
                       >
@@ -422,7 +424,7 @@ export default function DashboardClient({ initialData, period }: Props) {
                       <Legend wrapperStyle={{ fontSize: '12px' }} />
                     </PieChart>
                   </ResponsiveContainer>
-                  <p className="text-center text-xs text-gray-500 mt-1">
+                  <p className="text-center text-xs text-gray-500 -mt-1">
                     Suma pkt:{' '}
                     <span className="font-bold text-[#FF5A3C]">{split.priority_total_points}</span>
                   </p>
