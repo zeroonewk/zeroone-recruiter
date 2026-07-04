@@ -8,7 +8,7 @@ export default async function KlienciPage() {
   if (!session) redirect('/zaloguj');
 
   const items = (await sql`
-    SELECT id, name, notes, is_archived, created_at, updated_at
+    SELECT id, name, notes, priority_class, is_archived, created_at, updated_at
     FROM clients
     WHERE NOT is_archived
     ORDER BY name ASC

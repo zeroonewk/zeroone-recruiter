@@ -5,6 +5,20 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import type { ProjectListItem } from '@/app/api/projekty/route';
 
+function PriorityBadge({ score }: { score: number }) {
+  const cls =
+    score <= 2
+      ? 'bg-red-100 text-red-700'
+      : score <= 4
+      ? 'bg-orange-100 text-orange-700'
+      : 'bg-gray-100 text-gray-600';
+  return (
+    <span className={`inline-flex items-center justify-center w-5 h-5 rounded-full text-xs font-medium ${cls}`}>
+      {score}
+    </span>
+  );
+}
+
 type FilterOption = { id: string; name: string };
 
 type Props = {
@@ -39,6 +53,7 @@ export default function ProjektyClient({
   const [clientId, setClientId] = useState(() => searchParams.get('klient') ?? '');
   const [typeId, setTypeId] = useState(() => searchParams.get('typ') ?? '');
   const [showArchived, setShowArchived] = useState(() => searchParams.get('archiwum') === '1');
+  const [sortBy, setSortBy] = useState(() => searchParams.get('sort') ?? '');
 
   function syncUrl(
     q: string,
@@ -47,6 +62,7 @@ export default function ProjektyClient({
     cl: string,
     ty: string,
     arch: boolean,
+    sort: string,
   ) {
     const params = new URLSearchParams();
     if (q) params.set('q', q);
@@ -55,15 +71,16 @@ export default function ProjektyClient({
     if (cl) params.set('klient', cl);
     if (ty) params.set('typ', ty);
     if (arch) params.set('archiwum', '1');
+    if (sort) params.set('sort', sort);
     const qs = params.toString();
     router.replace(qs ? `/projekty?${qs}` : '/projekty');
   }
 
-  const hasFilters = !!(search || statusId || ownerId || clientId || typeId || showArchived);
+  const hasFilters = !!(search || statusId || ownerId || clientId || typeId || showArchived || sortBy);
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase().trim();
-    return initialItems.filter((p) => {
+    const list = initialItems.filter((p) => {
       if (!showArchived && p.is_archived) return false;
       if (statusId && p.status_id !== statusId) return false;
       if (ownerId && p.owner_id !== ownerId) return false;
@@ -72,7 +89,14 @@ export default function ProjektyClient({
       if (q && !`${p.title} ${p.client_name}`.toLowerCase().includes(q)) return false;
       return true;
     });
-  }, [initialItems, search, statusId, ownerId, clientId, typeId, showArchived]);
+    if (sortBy === 'priority') {
+      list.sort((a, b) => {
+        if (a.client_priority !== b.client_priority) return a.client_priority - b.client_priority;
+        return a.priority_score - b.priority_score;
+      });
+    }
+    return list;
+  }, [initialItems, search, statusId, ownerId, clientId, typeId, showArchived, sortBy]);
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-8">
@@ -95,7 +119,7 @@ export default function ProjektyClient({
           onChange={(e) => {
             const v = e.target.value;
             setSearch(v);
-            syncUrl(v, statusId, ownerId, clientId, typeId, showArchived);
+            syncUrl(v, statusId, ownerId, clientId, typeId, showArchived, sortBy);
           }}
           className="px-3 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#FF5A3C] focus:border-transparent min-w-[160px]"
         />
@@ -104,7 +128,7 @@ export default function ProjektyClient({
           onChange={(e) => {
             const v = e.target.value;
             setStatusId(v);
-            syncUrl(search, v, ownerId, clientId, typeId, showArchived);
+            syncUrl(search, v, ownerId, clientId, typeId, showArchived, sortBy);
           }}
           className={selectCls}
         >
@@ -120,7 +144,7 @@ export default function ProjektyClient({
           onChange={(e) => {
             const v = e.target.value;
             setClientId(v);
-            syncUrl(search, statusId, ownerId, v, typeId, showArchived);
+            syncUrl(search, statusId, ownerId, v, typeId, showArchived, sortBy);
           }}
           className={selectCls}
         >
@@ -136,7 +160,7 @@ export default function ProjektyClient({
           onChange={(e) => {
             const v = e.target.value;
             setOwnerId(v);
-            syncUrl(search, statusId, v, clientId, typeId, showArchived);
+            syncUrl(search, statusId, v, clientId, typeId, showArchived, sortBy);
           }}
           className={selectCls}
         >
@@ -152,7 +176,7 @@ export default function ProjektyClient({
           onChange={(e) => {
             const v = e.target.value;
             setTypeId(v);
-            syncUrl(search, statusId, ownerId, clientId, v, showArchived);
+            syncUrl(search, statusId, ownerId, clientId, v, showArchived, sortBy);
           }}
           className={selectCls}
         >
@@ -163,6 +187,18 @@ export default function ProjektyClient({
             </option>
           ))}
         </select>
+        <select
+          value={sortBy}
+          onChange={(e) => {
+            const v = e.target.value;
+            setSortBy(v);
+            syncUrl(search, statusId, ownerId, clientId, typeId, showArchived, v);
+          }}
+          className={selectCls}
+        >
+          <option value="">Domyslna kolejnosc</option>
+          <option value="priority">Priorytet</option>
+        </select>
         <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer select-none">
           <input
             type="checkbox"
@@ -170,11 +206,11 @@ export default function ProjektyClient({
             onChange={(e) => {
               const v = e.target.checked;
               setShowArchived(v);
-              syncUrl(search, statusId, ownerId, clientId, typeId, v);
+              syncUrl(search, statusId, ownerId, clientId, typeId, v, sortBy);
             }}
             className="rounded"
           />
-          Pokaż zarchiwizowane
+          Pokaz zarchiwizowane
         </label>
         {hasFilters && (
           <button
@@ -186,6 +222,7 @@ export default function ProjektyClient({
               setClientId('');
               setTypeId('');
               setShowArchived(false);
+              setSortBy('');
               router.replace('/projekty');
             }}
             className="ml-auto text-sm text-gray-500 hover:text-gray-700 underline"
@@ -210,6 +247,7 @@ export default function ProjektyClient({
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-gray-200 bg-gray-50">
+                  <th className="px-4 py-3 text-left font-medium text-gray-700">P</th>
                   <th className="px-4 py-3 text-left font-medium text-gray-700">Projekt</th>
                   <th className="px-4 py-3 text-left font-medium text-gray-700">Klient</th>
                   <th className="px-4 py-3 text-left font-medium text-gray-700">Status</th>
@@ -228,6 +266,9 @@ export default function ProjektyClient({
                       p.is_archived ? ' opacity-60' : ''
                     }`}
                   >
+                    <td className="px-4 py-3">
+                      <PriorityBadge score={p.priority_score} />
+                    </td>
                     <td className={`px-4 py-3 border-l-2 ${p.has_freelancers ? 'border-l-[#FF5A3C]' : 'border-l-transparent'}`}>
                       <span className="flex items-center gap-1.5">
                         <Link

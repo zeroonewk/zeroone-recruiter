@@ -6,10 +6,17 @@ export type Client = {
   id: string;
   name: string;
   notes: string | null;
+  priority_class: number;
   is_archived: boolean;
   created_at: string;
   updated_at: string;
 };
+
+const PRIORITY_OPTIONS = [
+  { value: 1, label: '1 - Kluczowy' },
+  { value: 2, label: '2 - Standardowy' },
+  { value: 3, label: '3 - Niskopriorytetowy' },
+] as const;
 
 function formatDate(dateStr: string): string {
   return new Intl.DateTimeFormat('pl-PL').format(new Date(dateStr));
@@ -31,6 +38,7 @@ type ModalProps = {
 function KlientModal({ client, onClose, onSaved }: ModalProps) {
   const [name, setName] = useState(client?.name ?? '');
   const [notes, setNotes] = useState(client?.notes ?? '');
+  const [priorityClass, setPriorityClass] = useState<number>(client?.priority_class ?? 2);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -49,6 +57,7 @@ function KlientModal({ client, onClose, onSaved }: ModalProps) {
         body: JSON.stringify({
           name: name.trim(),
           notes: notes.trim() || null,
+          priority_class: priorityClass,
         }),
       });
       const data = (await res.json()) as { ok: boolean; error?: string };
@@ -104,6 +113,25 @@ function KlientModal({ client, onClose, onSaved }: ModalProps) {
               onChange={(e) => setNotes(e.target.value)}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#FF5A3C] focus:border-transparent resize-none"
             />
+          </div>
+
+          <div className="mb-4">
+            <p className="block text-sm font-medium text-gray-700 mb-2">Klasa priorytetu</p>
+            <div className="flex gap-3">
+              {PRIORITY_OPTIONS.map((opt) => (
+                <label key={opt.value} className="flex items-center gap-1.5 cursor-pointer text-sm text-gray-700">
+                  <input
+                    type="radio"
+                    name="priority_class"
+                    value={opt.value}
+                    checked={priorityClass === opt.value}
+                    onChange={() => setPriorityClass(opt.value)}
+                    className="accent-[#FF5A3C]"
+                  />
+                  {opt.label}
+                </label>
+              ))}
+            </div>
           </div>
 
           {error && (
@@ -264,6 +292,9 @@ export default function KlienciClient({ initialItems }: Props) {
                 Nazwa
               </th>
               <th className="text-left px-4 py-3 text-xs uppercase tracking-wider text-gray-600 font-medium">
+                Priorytet
+              </th>
+              <th className="text-left px-4 py-3 text-xs uppercase tracking-wider text-gray-600 font-medium">
                 Notatki
               </th>
               <th className="text-left px-4 py-3 text-xs uppercase tracking-wider text-gray-600 font-medium">
@@ -278,7 +309,7 @@ export default function KlienciClient({ initialItems }: Props) {
             {loading ? (
               <tr>
                 <td
-                  colSpan={4}
+                  colSpan={5}
                   className="px-4 py-8 text-center text-gray-500 text-sm"
                 >
                   Ladowanie...
@@ -287,7 +318,7 @@ export default function KlienciClient({ initialItems }: Props) {
             ) : items.length === 0 ? (
               <tr>
                 <td
-                  colSpan={4}
+                  colSpan={5}
                   className="px-4 py-8 text-center text-gray-500 text-sm"
                 >
                   Brak klientow. Dodaj pierwszego klienta.
@@ -303,6 +334,11 @@ export default function KlienciClient({ initialItems }: Props) {
                     className={`px-4 py-3 text-sm font-medium${client.is_archived ? ' text-gray-500' : ' text-gray-900'}`}
                   >
                     {client.name}
+                  </td>
+                  <td className="px-4 py-3 text-sm">
+                    <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-gray-100 text-gray-600 text-xs font-medium">
+                      {client.priority_class}
+                    </span>
                   </td>
                   <td
                     className={`px-4 py-3 text-sm${client.is_archived ? ' text-gray-400' : ' text-gray-600'}`}

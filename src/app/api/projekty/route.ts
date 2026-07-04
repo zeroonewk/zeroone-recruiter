@@ -16,8 +16,11 @@ export type ProjectListItem = {
   updated_at: string;
   client_id: string;
   client_name: string;
+  client_priority: number;
   type_id: string;
   type_name: string;
+  type_priority: number;
+  priority_score: number;
   owner_id: string;
   owner_name: string;
   owner_email: string;
@@ -41,8 +44,9 @@ export async function GET(request: NextRequest) {
       SELECT
         p.id, p.title, p.points, p.opened_at, p.closed_at, p.is_archived,
         p.created_at, p.updated_at,
-        c.id AS client_id, c.name AS client_name,
-        pt.id AS type_id, pt.name AS type_name,
+        c.id AS client_id, c.name AS client_name, c.priority_class AS client_priority,
+        pt.id AS type_id, pt.name AS type_name, pt.priority_class AS type_priority,
+        (c.priority_class * pt.priority_class) AS priority_score,
         u.id AS owner_id, u.name AS owner_name, u.email AS owner_email,
         rs.id AS status_id, rs.name AS status_name, rs.color AS status_color,
         rs.is_success AS status_is_success,
@@ -83,8 +87,11 @@ export async function GET(request: NextRequest) {
       updated_at: toDateString(r.updated_at) ?? '',
       client_id: r.client_id as string,
       client_name: r.client_name as string,
+      client_priority: r.client_priority as number,
       type_id: r.type_id as string,
       type_name: r.type_name as string,
+      type_priority: r.type_priority as number,
+      priority_score: r.priority_score as number,
       owner_id: r.owner_id as string,
       owner_name: r.owner_name as string,
       owner_email: r.owner_email as string,

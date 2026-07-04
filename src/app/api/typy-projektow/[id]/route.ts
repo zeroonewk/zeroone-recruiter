@@ -6,6 +6,7 @@ type ProjectTypeRow = {
   id: string;
   name: string;
   default_points: number;
+  priority_class: number;
   is_archived: boolean;
   created_at: string;
   updated_at: string;
@@ -25,7 +26,7 @@ export async function GET(_req: NextRequest, { params }: RouteContext) {
     }
 
     const rows = (await sql`
-      SELECT id, name, default_points, is_archived, created_at, updated_at
+      SELECT id, name, default_points, priority_class, is_archived, created_at, updated_at
       FROM project_types
       WHERE id = ${id}
     `) as ProjectTypeRow[];
@@ -93,9 +94,21 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
       values.push(body.is_archived);
     }
 
+    if ('priority_class' in body) {
+      const rawPriority = Number(body.priority_class);
+      if (![1, 2, 3].includes(rawPriority)) {
+        return NextResponse.json(
+          { ok: false, error: 'priority_class musi byc 1, 2 lub 3' },
+          { status: 400 }
+        );
+      }
+      setClauses.push(`priority_class = $${i++}`);
+      values.push(rawPriority);
+    }
+
     if (setClauses.length === 0) {
       const rows = (await sql`
-        SELECT id, name, default_points, is_archived, created_at, updated_at
+        SELECT id, name, default_points, priority_class, is_archived, created_at, updated_at
         FROM project_types WHERE id = ${id}
       `) as ProjectTypeRow[];
       if (!rows[0]) {
@@ -105,7 +118,7 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
     }
 
     values.push(id);
-    const queryStr = `UPDATE project_types SET ${setClauses.join(', ')} WHERE id = $${i} RETURNING id, name, default_points, is_archived, created_at, updated_at`;
+    const queryStr = `UPDATE project_types SET ${setClauses.join(', ')} WHERE id = $${i} RETURNING id, name, default_points, priority_class, is_archived, created_at, updated_at`;
     const rows = (await sql.query(queryStr, values)) as ProjectTypeRow[];
 
     if (!rows[0]) {

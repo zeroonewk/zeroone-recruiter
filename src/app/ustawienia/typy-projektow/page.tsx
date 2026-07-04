@@ -8,7 +8,7 @@ export default async function TypyProjektowPage() {
   if (!session) redirect('/zaloguj');
 
   const items = (await sql`
-    SELECT id, name, default_points, is_archived, created_at, updated_at
+    SELECT id, name, default_points, priority_class, is_archived, created_at, updated_at
     FROM project_types
     WHERE NOT is_archived
     ORDER BY name ASC

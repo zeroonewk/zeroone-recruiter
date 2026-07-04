@@ -6,6 +6,7 @@ type ClientRow = {
   id: string;
   name: string;
   notes: string | null;
+  priority_class: number;
   is_archived: boolean;
   created_at: string;
   updated_at: string;
@@ -17,7 +18,7 @@ export async function GET(request: NextRequest) {
     const archived = request.nextUrl.searchParams.get('archived') === 'true';
 
     const rows = (await sql`
-      SELECT id, name, notes, is_archived, created_at, updated_at
+      SELECT id, name, notes, priority_class, is_archived, created_at, updated_at
       FROM clients
       WHERE (CASE WHEN ${archived} THEN TRUE ELSE is_archived = FALSE END)
       ORDER BY is_archived ASC, name ASC
@@ -39,6 +40,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json().catch(() => null);
     const rawName = typeof body?.name === 'string' ? body.name.trim() : '';
     const rawNotes = typeof body?.notes === 'string' ? body.notes.trim() : null;
+    const rawPriority = Number(body?.priority_class ?? 2);
 
     if (rawName.length < 2 || rawName.length > 200) {
       return NextResponse.json(
@@ -52,11 +54,17 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
+    if (![1, 2, 3].includes(rawPriority)) {
+      return NextResponse.json(
+        { ok: false, error: 'priority_class musi byc 1, 2 lub 3' },
+        { status: 400 }
+      );
+    }
 
     const rows = (await sql`
-      INSERT INTO clients (name, notes)
-      VALUES (${rawName}, ${rawNotes})
-      RETURNING id, name, notes, is_archived, created_at, updated_at
+      INSERT INTO clients (name, notes, priority_class)
+      VALUES (${rawName}, ${rawNotes}, ${rawPriority})
+      RETURNING id, name, notes, priority_class, is_archived, created_at, updated_at
     `) as ClientRow[];
 
     return NextResponse.json({ ok: true, item: rows[0] }, { status: 201 });
