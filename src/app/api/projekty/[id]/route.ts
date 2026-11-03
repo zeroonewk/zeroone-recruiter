@@ -161,6 +161,26 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
           { status: 400 }
         );
       }
+
+      const projRows = (await sql`
+        SELECT owner_id, closed_at FROM projects WHERE id = ${id}::uuid
+      `) as { owner_id: string; closed_at: string | null }[];
+      if (!projRows[0]) {
+        return NextResponse.json({ ok: false, error: 'Projekt nie istnieje' }, { status: 404 });
+      }
+      if (session.role !== 'admin' && session.sub !== projRows[0].owner_id) {
+        return NextResponse.json(
+          { ok: false, error: 'Tylko admin lub owner moze zmienic tytul' },
+          { status: 403 }
+        );
+      }
+      if (projRows[0].closed_at !== null) {
+        return NextResponse.json(
+          { ok: false, error: 'Projekt jest zamkniety, nie mozna zmienic tytulu' },
+          { status: 400 }
+        );
+      }
+
       setClauses.push(`title = $${i++}`);
       values.push(title);
     }
@@ -326,7 +346,7 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
       }
 
       const userRows = (await sql`
-        SELECT id FROM users WHERE id = ${newOwnerId}::uuid AND is_active = TRUE
+        SELECT id FROM users WHERE id = ${newOwnerId}::uuid AND is_active = TRUE AND is_archived = FALSE
       `) as { id: string }[];
 
       if (!userRows[0]) {

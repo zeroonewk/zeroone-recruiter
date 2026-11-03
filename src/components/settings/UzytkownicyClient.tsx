@@ -9,6 +9,7 @@ export type User = {
   role: 'admin' | 'recruiter';
   is_active: boolean;
   is_external: boolean;
+  is_archived: boolean;
   created_at: string;
   updated_at: string;
 };
@@ -333,12 +334,14 @@ export default function UzytkownicyClient({ initialItems, currentUserId }: Props
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [passwordModalUser, setPasswordModalUser] = useState<User | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [showArchived, setShowArchived] = useState(false);
 
-  async function fetchItems() {
+  async function fetchItems(includeArchived: boolean = showArchived) {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch('/api/uzytkownicy');
+      const url = includeArchived ? '/api/uzytkownicy?include_archived=1' : '/api/uzytkownicy';
+      const res = await fetch(url);
       const data = (await res.json()) as { ok: boolean; items?: User[]; error?: string };
       if (data.ok && data.items) {
         setItems(data.items);
@@ -350,6 +353,11 @@ export default function UzytkownicyClient({ initialItems, currentUserId }: Props
     } finally {
       setLoading(false);
     }
+  }
+
+  async function handleToggleShowArchived(checked: boolean) {
+    setShowArchived(checked);
+    await fetchItems(checked);
   }
 
   function openAdd() {
@@ -411,6 +419,50 @@ export default function UzytkownicyClient({ initialItems, currentUserId }: Props
     }
   }
 
+  async function handleArchive(user: User) {
+    if (
+      !confirm(
+        'Zarchiwizowac uzytkownika? Zniknie z listy, historia punktow i wyplat zostaje.'
+      )
+    )
+      return;
+    setError(null);
+    try {
+      const res = await fetch(`/api/uzytkownicy/${user.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ is_archived: true }),
+      });
+      const data = (await res.json()) as { ok: boolean; error?: string };
+      if (data.ok) {
+        await fetchItems();
+      } else {
+        setError(data.error ?? 'Blad archiwizacji');
+      }
+    } catch {
+      setError('Blad polaczenia z serwerem');
+    }
+  }
+
+  async function handleUnarchive(user: User) {
+    setError(null);
+    try {
+      const res = await fetch(`/api/uzytkownicy/${user.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ is_archived: false }),
+      });
+      const data = (await res.json()) as { ok: boolean; error?: string };
+      if (data.ok) {
+        await fetchItems();
+      } else {
+        setError(data.error ?? 'Blad przywracania');
+      }
+    } catch {
+      setError('Blad polaczenia z serwerem');
+    }
+  }
+
   return (
     <div>
       {/* Header */}
@@ -430,6 +482,17 @@ export default function UzytkownicyClient({ initialItems, currentUserId }: Props
           {error}
         </div>
       )}
+
+      {/* Show archived toggle */}
+      <label className="flex items-center gap-2 cursor-pointer select-none mb-3">
+        <input
+          type="checkbox"
+          checked={showArchived}
+          onChange={(e) => void handleToggleShowArchived(e.target.checked)}
+          className="w-4 h-4 accent-[#FF5A3C]"
+        />
+        <span className="text-sm text-gray-700">Pokaz zarchiwizowanych</span>
+      </label>
 
       {/* Table */}
       <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
@@ -469,10 +532,14 @@ export default function UzytkownicyClient({ initialItems, currentUserId }: Props
             ) : (
               items.map((user) => {
                 const isSelf = user.id === currentUserId;
+                const canArchive =
+                  !user.is_active && user.role !== 'admin' && !isSelf && !user.is_archived;
                 return (
                   <tr
                     key={user.id}
-                    className={`border-t border-gray-100 hover:bg-gray-50 transition-colors${!user.is_active ? ' bg-gray-50' : ''}`}
+                    className={`border-t border-gray-100 hover:bg-gray-50 transition-colors${
+                      user.is_archived ? ' bg-gray-100' : !user.is_active ? ' bg-gray-50' : ''
+                    }`}
                   >
                     <td className="px-4 py-3 text-sm">
                       <span className={`font-medium${!user.is_active ? ' text-gray-500' : ' text-gray-900'}`}>
@@ -494,7 +561,11 @@ export default function UzytkownicyClient({ initialItems, currentUserId }: Props
                       {ROLE_LABELS[user.role] ?? user.role}
                     </td>
                     <td className="px-4 py-3 text-sm">
-                      {user.is_active ? (
+                      {user.is_archived ? (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-200 text-gray-600">
+                          Archiwum
+                        </span>
+                      ) : user.is_active ? (
                         <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-50 text-green-700">
                           Aktywny
                         </span>
@@ -517,7 +588,14 @@ export default function UzytkownicyClient({ initialItems, currentUserId }: Props
                       >
                         Zmien haslo
                       </button>
-                      {user.is_active ? (
+                      {user.is_archived ? (
+                        <button
+                          onClick={() => handleUnarchive(user)}
+                          className="text-gray-600 hover:underline"
+                        >
+                          Przywroc
+                        </button>
+                      ) : user.is_active ? (
                         <button
                           onClick={() => handleDeactivate(user)}
                           disabled={isSelf}
@@ -526,12 +604,22 @@ export default function UzytkownicyClient({ initialItems, currentUserId }: Props
                           Dezaktywuj
                         </button>
                       ) : (
-                        <button
-                          onClick={() => handleActivate(user)}
-                          className="text-gray-600 hover:underline"
-                        >
-                          Aktywuj
-                        </button>
+                        <>
+                          <button
+                            onClick={() => handleActivate(user)}
+                            className="text-gray-600 hover:underline mr-3"
+                          >
+                            Aktywuj
+                          </button>
+                          {canArchive && (
+                            <button
+                              onClick={() => handleArchive(user)}
+                              className="text-gray-600 hover:underline"
+                            >
+                              Archiwizuj
+                            </button>
+                          )}
+                        </>
                       )}
                     </td>
                   </tr>

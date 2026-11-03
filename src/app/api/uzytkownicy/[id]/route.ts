@@ -9,11 +9,12 @@ type UserRow = {
   role: 'admin' | 'recruiter';
   is_active: boolean;
   is_external: boolean;
+  is_archived: boolean;
   created_at: string;
   updated_at: string;
 };
 
-type UserBasic = { id: string; role: string; is_active: boolean };
+type UserBasic = { id: string; role: string; is_active: boolean; is_archived: boolean };
 type CountRow = { count: number };
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -40,7 +41,7 @@ export async function GET(_req: NextRequest, { params }: RouteContext) {
     }
 
     const rows = (await sql`
-      SELECT id, email, name, role, is_active, is_external, created_at, updated_at
+      SELECT id, email, name, role, is_active, is_external, is_archived, created_at, updated_at
       FROM users WHERE id = ${id}
     `) as UserRow[];
 
@@ -103,14 +104,42 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
         { status: 400 }
       );
     }
+    if ('is_archived' in body && typeof body.is_archived !== 'boolean') {
+      return NextResponse.json(
+        { ok: false, error: 'is_archived musi byc wartoscia logiczna' },
+        { status: 400 }
+      );
+    }
 
     // Fetch current user state
     const currentRows = (await sql`
-      SELECT id, role, is_active FROM users WHERE id = ${id}
+      SELECT id, role, is_active, is_archived FROM users WHERE id = ${id}
     `) as UserBasic[];
     const current = currentRows[0];
     if (!current) {
       return NextResponse.json({ ok: false, error: 'Uzytkownik nie istnieje' }, { status: 404 });
+    }
+
+    // Archiving restrictions: only inactive, non-admin, non-self users can be archived
+    if ('is_archived' in body && body.is_archived === true) {
+      if (current.is_active) {
+        return NextResponse.json(
+          { ok: false, error: 'Mozna zarchiwizowac tylko nieaktywnego uzytkownika' },
+          { status: 400 }
+        );
+      }
+      if (current.role === 'admin') {
+        return NextResponse.json(
+          { ok: false, error: 'Nie mozna zarchiwizowac administratora' },
+          { status: 400 }
+        );
+      }
+      if (id === session.sub) {
+        return NextResponse.json(
+          { ok: false, error: 'Nie mozesz zarchiwizowac samego siebie' },
+          { status: 400 }
+        );
+      }
     }
 
     // Self-protection
@@ -155,16 +184,17 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
     if ('role' in body) { setClauses.push(`role = $${i++}`); values.push(body.role); }
     if ('is_active' in body) { setClauses.push(`is_active = $${i++}`); values.push(body.is_active); }
     if ('is_external' in body) { setClauses.push(`is_external = $${i++}`); values.push(body.is_external); }
+    if ('is_archived' in body) { setClauses.push(`is_archived = $${i++}`); values.push(body.is_archived); }
 
     if (setClauses.length === 0) {
       const rows = (await sql`
-        SELECT id, email, name, role, is_active, is_external, created_at, updated_at FROM users WHERE id = ${id}
+        SELECT id, email, name, role, is_active, is_external, is_archived, created_at, updated_at FROM users WHERE id = ${id}
       `) as UserRow[];
       return NextResponse.json({ ok: true, item: rows[0] });
     }
 
     values.push(id);
-    const queryStr = `UPDATE users SET ${setClauses.join(', ')} WHERE id = $${i} RETURNING id, email, name, role, is_active, is_external, created_at, updated_at`;
+    const queryStr = `UPDATE users SET ${setClauses.join(', ')} WHERE id = $${i} RETURNING id, email, name, role, is_active, is_external, is_archived, created_at, updated_at`;
     const rows = (await sql.query(queryStr, values)) as UserRow[];
 
     if (!rows[0]) {

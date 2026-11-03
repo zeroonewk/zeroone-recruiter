@@ -92,8 +92,8 @@ export default async function ProjektDetailPage({
       WHERE is_archived = FALSE
       ORDER BY position ASC
     `,
-    sql`SELECT id, name FROM users WHERE is_active = TRUE ORDER BY name ASC`,
-    sql`SELECT id, name FROM users WHERE is_external = TRUE AND is_active = TRUE ORDER BY name ASC`,
+    sql`SELECT id, name FROM users WHERE is_active = TRUE AND is_archived = FALSE ORDER BY name ASC`,
+    sql`SELECT id, name FROM users WHERE is_external = TRUE AND is_active = TRUE AND is_archived = FALSE ORDER BY name ASC`,
     sql`SELECT user_id FROM project_freelancers WHERE project_id = ${id}::uuid`,
     sql`
       SELECT funnel FROM funnel_snapshots

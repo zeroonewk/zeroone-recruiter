@@ -60,7 +60,7 @@ export default async function NowyProjektPage() {
     sql`SELECT id, name FROM clients WHERE is_archived = FALSE ORDER BY name ASC`,
     sql`SELECT id, name, default_points FROM project_types WHERE is_archived = FALSE ORDER BY name ASC`,
     sql`SELECT id, name, color, is_success FROM result_statuses WHERE is_archived = FALSE ORDER BY position ASC`,
-    sql`SELECT id, name, email FROM users WHERE is_active = TRUE ORDER BY name ASC`,
+    sql`SELECT id, name, email FROM users WHERE is_active = TRUE AND is_archived = FALSE ORDER BY name ASC`,
     sql`SELECT id, name, position, default_days_offset FROM workflow_stages_template WHERE is_archived = FALSE ORDER BY position ASC`,
   ]);
 

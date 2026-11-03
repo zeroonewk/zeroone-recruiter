@@ -88,6 +88,12 @@ export default function ProjektEdycjaClient({
   const [savingStageId, setSavingStageId] = useState<string | null>(null);
   const [toast, setToast] = useState<Toast | null>(null);
 
+  // ── Title edit state ──────────────────────────────────────────────────────
+  const [editingTitle, setEditingTitle] = useState(false);
+  const [titleDraft, setTitleDraft] = useState(initialProject.title);
+  const [savingTitle, setSavingTitle] = useState(false);
+  const [titleError, setTitleError] = useState<string | null>(null);
+
   // ── Close modal state ─────────────────────────────────────────────────────
   const [closeModalOpen, setCloseModalOpen] = useState(false);
   const [closeModalStatusId, setCloseModalStatusId] = useState<string | null>(null);
@@ -155,6 +161,54 @@ export default function ProjektEdycjaClient({
       showToast('error', 'Blad polaczenia z serwerem');
     } finally {
       setSavingStageId(null);
+    }
+  }
+
+  // ── Title handler ─────────────────────────────────────────────────────────
+
+  const canEditTitle =
+    project.closed_at === null &&
+    (currentUserRole === 'admin' || currentUserId === project.owner_id);
+
+  function startEditTitle() {
+    setTitleDraft(project.title);
+    setTitleError(null);
+    setEditingTitle(true);
+  }
+
+  function cancelEditTitle() {
+    setEditingTitle(false);
+    setTitleDraft(project.title);
+    setTitleError(null);
+  }
+
+  async function handleSaveTitle() {
+    const trimmed = titleDraft.trim();
+    if (trimmed.length < 2 || trimmed.length > 200) {
+      setTitleError('Tytul musi miec od 2 do 200 znakow');
+      return;
+    }
+    setTitleError(null);
+    setSavingTitle(true);
+    try {
+      const res = await fetch(`/api/projekty/${project.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: trimmed }),
+      });
+      const data = (await res.json()) as { ok: boolean; project?: ProjectFull; error?: string };
+      if (data.ok) {
+        if (data.project) setProject(data.project);
+        setEditingTitle(false);
+        showToast('success', 'Zapisano tytul');
+        router.refresh();
+      } else {
+        setTitleError(data.error ?? 'Blad serwera');
+      }
+    } catch {
+      setTitleError('Blad polaczenia z serwerem');
+    } finally {
+      setSavingTitle(false);
     }
   }
 
@@ -588,7 +642,50 @@ export default function ProjektEdycjaClient({
       {/* Header */}
       <div className="flex justify-between items-start mb-6 gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">{project.title}</h1>
+          {editingTitle ? (
+            <div>
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  autoFocus
+                  value={titleDraft}
+                  onChange={(e) => setTitleDraft(e.target.value)}
+                  disabled={savingTitle}
+                  className="text-2xl font-bold text-gray-900 px-2 py-1 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#FF5A3C] focus:border-transparent disabled:bg-gray-50"
+                />
+                <button
+                  type="button"
+                  onClick={() => void handleSaveTitle()}
+                  disabled={savingTitle}
+                  className={btnPrimarySmall}
+                >
+                  {savingTitle ? 'Zapis...' : 'Zapisz'}
+                </button>
+                <button
+                  type="button"
+                  onClick={cancelEditTitle}
+                  disabled={savingTitle}
+                  className="px-3 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium rounded-md disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
+                >
+                  Anuluj
+                </button>
+              </div>
+              {titleError && <p className="text-sm text-red-600 mt-1">{titleError}</p>}
+            </div>
+          ) : (
+            <div className="flex items-center gap-2">
+              <h1 className="text-2xl font-bold text-gray-900">{project.title}</h1>
+              {canEditTitle && (
+                <button
+                  type="button"
+                  onClick={startEditTitle}
+                  className="text-xs text-[#FF5A3C] hover:underline shrink-0"
+                >
+                  Edytuj
+                </button>
+              )}
+            </div>
+          )}
           <div className="flex items-center gap-2 mt-1.5 flex-wrap">
             <span className="flex items-center gap-1.5 text-sm text-gray-700">
               <span

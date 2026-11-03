@@ -9,7 +9,7 @@ export async function GET() {
     const rows = (await sql`
       SELECT id, name
       FROM users
-      WHERE is_external = TRUE AND is_active = TRUE
+      WHERE is_external = TRUE AND is_active = TRUE AND is_archived = FALSE
       ORDER BY name ASC
     `) as { id: string; name: string }[];
 

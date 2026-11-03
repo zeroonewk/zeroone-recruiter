@@ -9,6 +9,7 @@ type UserRow = {
   role: 'admin' | 'recruiter';
   is_active: boolean;
   is_external: boolean;
+  is_archived: boolean;
   created_at: string;
   updated_at: string;
 };
@@ -21,18 +22,27 @@ async function getAdminSession() {
   return session;
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     const session = await getAdminSession();
     if (!session) {
       return NextResponse.json({ ok: false, error: 'Brak uprawnien' }, { status: 403 });
     }
 
-    const rows = (await sql`
-      SELECT id, email, name, role, is_active, is_external, created_at, updated_at
-      FROM users
-      ORDER BY name ASC
-    `) as UserRow[];
+    const includeArchived = request.nextUrl.searchParams.get('include_archived') === '1';
+
+    const rows = (includeArchived
+      ? await sql`
+          SELECT id, email, name, role, is_active, is_external, is_archived, created_at, updated_at
+          FROM users
+          ORDER BY name ASC
+        `
+      : await sql`
+          SELECT id, email, name, role, is_active, is_external, is_archived, created_at, updated_at
+          FROM users
+          WHERE is_archived = FALSE
+          ORDER BY name ASC
+        `) as UserRow[];
 
     return NextResponse.json({ ok: true, items: rows });
   } catch (e) {
@@ -81,7 +91,7 @@ export async function POST(request: NextRequest) {
     const rows = (await sql`
       INSERT INTO users (email, name, role, password_hash, is_external)
       VALUES (${rawEmail}, ${rawName}, ${rawRole}, ${hash}, ${rawIsExternal})
-      RETURNING id, email, name, role, is_active, is_external, created_at, updated_at
+      RETURNING id, email, name, role, is_active, is_external, is_archived, created_at, updated_at
     `) as UserRow[];
 
     return NextResponse.json({ ok: true, item: rows[0] }, { status: 201 });
