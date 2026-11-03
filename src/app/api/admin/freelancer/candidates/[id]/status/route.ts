@@ -12,10 +12,6 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
   try {
     const session = await requireSession();
 
-    if (session.role !== 'admin') {
-      return NextResponse.json({ ok: false, error: 'Brak uprawnien' }, { status: 403 });
-    }
-
     const { id } = await params;
     if (!UUID_RE.test(id)) {
       return NextResponse.json({ ok: false, error: 'Nieprawidlowe id' }, { status: 400 });
@@ -35,11 +31,18 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
     }
 
     const currentRows = (await sql`
-      SELECT status FROM freelancer_candidates WHERE id = ${id}::uuid
-    `) as { status: string }[];
+      SELECT fc.status, p.owner_id
+      FROM freelancer_candidates fc
+      JOIN projects p ON p.id = fc.project_id
+      WHERE fc.id = ${id}::uuid
+    `) as { status: string; owner_id: string }[];
 
     if (!currentRows[0]) {
       return NextResponse.json({ ok: false, error: 'Kandydat nie istnieje' }, { status: 404 });
+    }
+
+    if (session.role !== 'admin' && session.sub !== currentRows[0].owner_id) {
+      return NextResponse.json({ ok: false, error: 'Brak uprawnien' }, { status: 403 });
     }
 
     const currentIdx = VALID_STATUSES.indexOf(currentRows[0].status as CandidateStatus);

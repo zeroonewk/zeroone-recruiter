@@ -170,6 +170,8 @@ export default function ProjektEdycjaClient({
     project.closed_at === null &&
     (currentUserRole === 'admin' || currentUserId === project.owner_id);
 
+  const canClose = currentUserRole === 'admin' || currentUserId === project.owner_id;
+
   function startEditTitle() {
     setTitleDraft(project.title);
     setTitleError(null);
@@ -325,6 +327,10 @@ export default function ProjektEdycjaClient({
     if (!chosen) return;
 
     if (chosen.is_success) {
+      if (!canClose) {
+        showToast('error', 'Brak uprawnien do zamkniecia projektu');
+        return;
+      }
       setCloseModalStatusId(newStatusId);
       setCloseAllocs(project.points === 0 ? [] : [{ user_id: project.owner_id, points: project.points }]);
       setCloseDate(todayStr());
@@ -781,6 +787,7 @@ export default function ProjektEdycjaClient({
               project_value: projectValue === '' ? null : projectValue,
             }}
             projectPoints={project.points}
+            canEdit={canClose}
           />
         )}
       </div>
@@ -844,7 +851,7 @@ export default function ProjektEdycjaClient({
                       className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-[#FF5A3C] focus:border-transparent disabled:bg-gray-50 disabled:cursor-not-allowed"
                     >
                       {availableStatuses.map((s) => (
-                        <option key={s.id} value={s.id}>
+                        <option key={s.id} value={s.id} disabled={s.is_success && !canClose}>
                           {s.name}
                         </option>
                       ))}

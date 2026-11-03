@@ -24,6 +24,7 @@ type Props = {
   projectId: string;
   freelancerRates: FreelancerRates;
   projectPoints: number;
+  canEdit: boolean;
 };
 
 function calcEarnings(
@@ -53,7 +54,7 @@ function groupByFreelancer(candidates: Candidate[]): FreelancerGroup[] {
   return Array.from(map.values());
 }
 
-export default function FreelancerCandidatesSection({ projectId, freelancerRates, projectPoints }: Props) {
+export default function FreelancerCandidatesSection({ projectId, freelancerRates, projectPoints, canEdit }: Props) {
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState('');
@@ -160,9 +161,9 @@ export default function FreelancerCandidatesSection({ projectId, freelancerRates
                       const stage2Checked = c.status === 'stage2' || c.status === 'selected';
                       const selectedChecked = c.status === 'selected';
                       // disabled when it would require a jump of 2+ steps
-                      const stage1Disabled = !['submitted', 'stage1'].includes(c.status) || updatingId === c.id;
-                      const stage2Disabled = !['stage1', 'stage2'].includes(c.status) || updatingId === c.id;
-                      const selectedDisabled = !['stage2', 'selected'].includes(c.status) || updatingId === c.id;
+                      const stage1Disabled = !canEdit || !['submitted', 'stage1'].includes(c.status) || updatingId === c.id;
+                      const stage2Disabled = !canEdit || !['stage1', 'stage2'].includes(c.status) || updatingId === c.id;
+                      const selectedDisabled = !canEdit || !['stage2', 'selected'].includes(c.status) || updatingId === c.id;
 
                       return (
                         <tr key={c.id} className="hover:bg-gray-50 transition-colors">
