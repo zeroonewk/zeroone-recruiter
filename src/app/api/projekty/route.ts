@@ -9,6 +9,8 @@ export type ProjectListItem = {
   id: string;
   title: string;
   points: number;
+  vacancies: number;
+  filled_vacancies: number;
   opened_at: string;
   closed_at: string | null;
   is_archived: boolean;
@@ -42,7 +44,7 @@ export async function GET(request: NextRequest) {
 
     const rows = (await sql`
       SELECT
-        p.id, p.title, p.points, p.opened_at, p.closed_at, p.is_archived,
+        p.id, p.title, p.points, p.vacancies, p.filled_vacancies, p.opened_at, p.closed_at, p.is_archived,
         p.created_at, p.updated_at,
         c.id AS client_id, c.name AS client_name, c.priority_class AS client_priority,
         pt.id AS type_id, pt.name AS type_name, pt.priority_class AS type_priority,
@@ -80,6 +82,8 @@ export async function GET(request: NextRequest) {
       id: r.id as string,
       title: r.title as string,
       points: r.points as number,
+      vacancies: r.vacancies as number,
+      filled_vacancies: r.filled_vacancies as number,
       opened_at: toDateString(r.opened_at) ?? '',
       closed_at: toDateString(r.closed_at),
       is_archived: r.is_archived as boolean,
@@ -176,6 +180,14 @@ export async function POST(request: NextRequest) {
     if (!Number.isInteger(points) || points < 0 || points > 25) {
       return NextResponse.json(
         { ok: false, error: 'Punkty musza byc liczba calkowita od 0 do 25' },
+        { status: 400 }
+      );
+    }
+
+    const vacancies = body.vacancies === undefined ? 1 : Number(body.vacancies);
+    if (!Number.isInteger(vacancies) || vacancies < 1 || vacancies > 50) {
+      return NextResponse.json(
+        { ok: false, error: 'Liczba wakatow musi byc liczba calkowita od 1 do 50' },
         { status: 400 }
       );
     }
@@ -295,7 +307,7 @@ export async function POST(request: NextRequest) {
 
     // ── Insert project ─────────────────────────────────────────────────────
     const projRows = (await sql`
-      INSERT INTO projects (title, client_id, project_type_id, owner_id, status_id, points, links, notes, opened_at, freelancer_rates, disable_stages)
+      INSERT INTO projects (title, client_id, project_type_id, owner_id, status_id, points, vacancies, links, notes, opened_at, freelancer_rates, disable_stages)
       VALUES (
         ${title},
         ${client_id}::uuid,
@@ -303,6 +315,7 @@ export async function POST(request: NextRequest) {
         ${owner_id}::uuid,
         ${status_id}::uuid,
         ${points},
+        ${vacancies},
         ${JSON.stringify(links)}::jsonb,
         ${notes},
         ${opened_at}::date,

@@ -104,6 +104,17 @@ export default function ProjektEdycjaClient({
   const [closeFreelancerPayouts, setCloseFreelancerPayouts] = useState<FreelancerPayout[]>([]);
   const [loadingFreelancerPayouts, setLoadingFreelancerPayouts] = useState(false);
 
+  // ── Vacancies edit state ──────────────────────────────────────────────────
+  const [vacanciesDraft, setVacanciesDraft] = useState(initialProject.vacancies);
+  const [savingVacancies, setSavingVacancies] = useState(false);
+
+  // ── Zalicz rekrutacje modal state ─────────────────────────────────────────
+  const [zaliczModalOpen, setZaliczModalOpen] = useState(false);
+  const [zaliczAllocs, setZaliczAllocs] = useState<Alloc[]>([]);
+  const [zaliczDate, setZaliczDate] = useState('');
+  const [zaliczError, setZaliczError] = useState<string | null>(null);
+  const [submittingZalicz, setSubmittingZalicz] = useState(false);
+
   useEffect(() => {
     if (!toast) return;
     const t = setTimeout(() => setToast(null), 2000);
@@ -607,6 +618,109 @@ export default function ProjektEdycjaClient({
     }
   }
 
+  // ── Vacancies handler ─────────────────────────────────────────────────────
+
+  async function handleSaveVacancies() {
+    setSavingVacancies(true);
+    try {
+      const res = await fetch(`/api/projekty/${project.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ vacancies: vacanciesDraft }),
+      });
+      const data = (await res.json()) as { ok: boolean; project?: ProjectFull; error?: string };
+      if (data.ok && data.project) {
+        setProject(data.project);
+        setVacanciesDraft(data.project.vacancies);
+        showToast('success', 'Zapisano liczbe wakatow');
+      } else {
+        showToast('error', data.error ?? 'Blad serwera');
+      }
+    } catch {
+      showToast('error', 'Blad polaczenia z serwerem');
+    } finally {
+      setSavingVacancies(false);
+    }
+  }
+
+  // ── Zalicz rekrutacje handlers ────────────────────────────────────────────
+
+  function openZaliczModal() {
+    setZaliczAllocs(
+      project.points === 0 ? [] : [{ user_id: project.owner_id, points: project.points }]
+    );
+    setZaliczDate(todayStr());
+    setZaliczError(null);
+    setZaliczModalOpen(true);
+  }
+
+  function handleZaliczModalCancel() {
+    setZaliczModalOpen(false);
+    setZaliczAllocs([]);
+    setZaliczDate('');
+    setZaliczError(null);
+  }
+
+  function updateZaliczAlloc(idx: number, field: 'user_id' | 'points', value: string | number) {
+    setZaliczAllocs((prev) => prev.map((a, i) => (i === idx ? { ...a, [field]: value } : a)));
+  }
+
+  function removeZaliczAlloc(idx: number) {
+    setZaliczAllocs((prev) => prev.filter((_, i) => i !== idx));
+  }
+
+  function addZaliczAlloc() {
+    setZaliczAllocs((prev) => [...prev, { user_id: '', points: 0 }]);
+  }
+
+  async function handleZaliczSubmit() {
+    setZaliczError(null);
+
+    if (!DATE_RE.test(zaliczDate)) {
+      setZaliczError('Nieprawidlowa data');
+      return;
+    }
+
+    if (project.points > 0) {
+      if (zaliczAllocs.some((a) => !a.user_id)) {
+        setZaliczError('Wybierz rekrutera dla kazdej alokacji');
+        return;
+      }
+      if (zaliczAllocs.some((a) => a.points < 1)) {
+        setZaliczError('Punkty alokacji musza byc wieksze od 0');
+        return;
+      }
+      const sum = zaliczAllocs.reduce((acc, a) => acc + a.points, 0);
+      if (sum !== project.points) {
+        setZaliczError(
+          `Suma punktow (${sum}) musi rownic sie puli projektu (${project.points})`
+        );
+        return;
+      }
+    }
+
+    setSubmittingZalicz(true);
+    try {
+      const res = await fetch(`/api/projekty/${project.id}/zalicz`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ allocations: zaliczAllocs, awarded_at: zaliczDate }),
+      });
+      const data = (await res.json()) as { ok: boolean; error?: string };
+      if (data.ok) {
+        setZaliczModalOpen(false);
+        showToast('success', 'Zaliczono rekrutacje');
+        router.refresh();
+      } else {
+        setZaliczError(data.error ?? 'Blad serwera');
+      }
+    } catch {
+      setZaliczError('Blad polaczenia z serwerem');
+    } finally {
+      setSubmittingZalicz(false);
+    }
+  }
+
   // ── Derived close modal values ────────────────────────────────────────────
 
   const isClosed = project.closed_at !== null || project.status_is_success;
@@ -620,6 +734,24 @@ export default function ProjektEdycjaClient({
       (closeAllocs.length > 0 &&
         closeAllocs.every((a) => a.user_id && a.points >= 1) &&
         sumOk));
+
+  const canFillVacancy =
+    project.vacancies > 1 &&
+    project.closed_at === null &&
+    project.filled_vacancies < project.vacancies &&
+    (currentUserRole === 'admin' || currentUserId === project.owner_id);
+  const allVacanciesFilled =
+    project.vacancies > 1 && project.filled_vacancies >= project.vacancies;
+
+  const zaliczSum = zaliczAllocs.reduce((acc, a) => acc + (a.points || 0), 0);
+  const zaliczSumOk = zaliczSum === project.points;
+  const zaliczCanSubmit =
+    !submittingZalicz &&
+    DATE_RE.test(zaliczDate) &&
+    (project.points === 0 ||
+      (zaliczAllocs.length > 0 &&
+        zaliczAllocs.every((a) => a.user_id && a.points >= 1) &&
+        zaliczSumOk));
 
   // ── Styles ────────────────────────────────────────────────────────────────
 
@@ -862,6 +994,11 @@ export default function ProjektEdycjaClient({
                       Projekt zostal zamkniety. Skontaktuj sie z administratorem aby cofnac.
                     </p>
                   )}
+                  {!isClosed && allVacanciesFilled && (
+                    <p className="text-xs text-green-700 bg-green-50 px-2 py-1.5 rounded-md mt-2">
+                      Wszystkie wakaty obsadzone - mozesz zamknac projekt
+                    </p>
+                  )}
                 </dd>
               </div>
               <div className="py-2 flex justify-between gap-4">
@@ -919,6 +1056,41 @@ export default function ProjektEdycjaClient({
               </div>
               {currentUserRole !== 'admin' && (
                 <p className="text-xs text-gray-500 mt-1">Tylko admin moze zmieniac punkty</p>
+              )}
+            </div>
+
+            {/* Vacancies */}
+            <div className="border-t border-gray-200 pt-4 mt-4">
+              <p className="text-sm font-medium text-gray-700 mb-2">Liczba wakatow</p>
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  min={1}
+                  max={50}
+                  step={1}
+                  value={vacanciesDraft}
+                  disabled={!canClose || savingVacancies}
+                  onChange={(e) =>
+                    setVacanciesDraft(Math.max(1, Math.min(50, Math.floor(Number(e.target.value)))))
+                  }
+                  className="w-16 px-2 py-1.5 border border-gray-300 rounded-md text-sm text-center focus:outline-none focus:ring-2 focus:ring-[#FF5A3C] focus:border-transparent disabled:bg-gray-50 disabled:text-gray-400"
+                />
+                {canClose && vacanciesDraft !== project.vacancies && (
+                  <button
+                    type="button"
+                    onClick={() => void handleSaveVacancies()}
+                    disabled={savingVacancies}
+                    className={btnPrimarySmall}
+                  >
+                    {savingVacancies ? 'Zapis...' : 'Zapisz'}
+                  </button>
+                )}
+              </div>
+              <p className="text-xs text-gray-500 mt-1">
+                Zrekrutowano {project.filled_vacancies} z {project.vacancies}
+              </p>
+              {!canClose && (
+                <p className="text-xs text-gray-500 mt-1">Tylko admin lub owner moze zmienic</p>
               )}
             </div>
 
@@ -1102,6 +1274,15 @@ export default function ProjektEdycjaClient({
           <div className={cardCls}>
             <h2 className={h2Cls}>Akcje</h2>
             <div className="flex flex-wrap gap-2">
+              {canFillVacancy && (
+                <button
+                  type="button"
+                  onClick={openZaliczModal}
+                  className={btnPrimary}
+                >
+                  Zalicz rekrutacje ({project.filled_vacancies}/{project.vacancies})
+                </button>
+              )}
               {currentUserRole === 'admin' && project.closed_at !== null && (
                 <button
                   type="button"
@@ -1276,6 +1457,126 @@ export default function ProjektEdycjaClient({
                 className={btnPrimary}
               >
                 {submittingClose ? 'Zamykanie...' : 'Zamknij projekt'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Zalicz rekrutacje modal ───────────────────────────────────────── */}
+      {zaliczModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-lg mx-4">
+            <div className="px-6 py-4 border-b border-gray-200">
+              <h2 className="text-base font-semibold text-gray-900">Zalicz rekrutacje</h2>
+              <p className="text-sm text-gray-500 mt-0.5">
+                Przypisz punkty rekruterom i ustaw date. Projekt zostaje aktywny.
+              </p>
+            </div>
+
+            <div className="px-6 py-4 space-y-4">
+              {/* Allocations — only for projects with points > 0 */}
+              {project.points > 0 && (
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-sm font-medium text-gray-700">
+                      Alokacja punktow (pula: {project.points} pkt)
+                    </p>
+                    <button
+                      type="button"
+                      onClick={addZaliczAlloc}
+                      disabled={zaliczAllocs.length >= 20}
+                      className="text-sm text-[#FF5A3C] hover:underline disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      + Dodaj rekrutera
+                    </button>
+                  </div>
+                  <div className="space-y-2">
+                    {zaliczAllocs.map((alloc, idx) => (
+                      <div key={idx} className="flex items-center gap-2">
+                        <select
+                          value={alloc.user_id}
+                          onChange={(e) => updateZaliczAlloc(idx, 'user_id', e.target.value)}
+                          className="flex-1 px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-[#FF5A3C] focus:border-transparent"
+                        >
+                          <option value="">-- wybierz --</option>
+                          {availableUsers.map((u) => (
+                            <option
+                              key={u.id}
+                              value={u.id}
+                              disabled={zaliczAllocs.some((a, i) => i !== idx && a.user_id === u.id)}
+                            >
+                              {u.name}
+                            </option>
+                          ))}
+                        </select>
+                        <input
+                          type="number"
+                          min={1}
+                          max={25}
+                          value={alloc.points || ''}
+                          onChange={(e) =>
+                            updateZaliczAlloc(idx, 'points', Number(e.target.value))
+                          }
+                          className="w-20 px-2 py-2 border border-gray-300 rounded-md text-sm text-center focus:outline-none focus:ring-2 focus:ring-[#FF5A3C] focus:border-transparent"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => removeZaliczAlloc(idx)}
+                          disabled={zaliczAllocs.length <= 1}
+                          className="text-gray-400 hover:text-red-600 transition-colors px-1 text-xl leading-none disabled:opacity-30 disabled:cursor-not-allowed"
+                          aria-label="Usun rekrutera"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                  <p
+                    className={`text-sm mt-2 font-medium ${
+                      zaliczSumOk ? 'text-green-600' : 'text-red-600'
+                    }`}
+                  >
+                    Suma: {zaliczSum} / {project.points} pkt
+                  </p>
+                </div>
+              )}
+
+              {/* Date */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Data</label>
+                <input
+                  type="date"
+                  value={zaliczDate}
+                  onChange={(e) => setZaliczDate(e.target.value)}
+                  className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-[#FF5A3C] focus:border-transparent"
+                />
+              </div>
+
+              {/* Error */}
+              {zaliczError && (
+                <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-md">
+                  {zaliczError}
+                </p>
+              )}
+            </div>
+
+            <div className="px-6 py-4 border-t border-gray-200 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={handleZaliczModalCancel}
+                disabled={submittingZalicz}
+                className="px-4 py-2 text-sm border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors disabled:opacity-60"
+              >
+                Anuluj
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleZaliczSubmit()}
+                disabled={!zaliczCanSubmit}
+                className={btnPrimary}
+              >
+                {submittingZalicz ? 'Zapisywanie...' : 'Zalicz rekrutacje'}
               </button>
             </div>
           </div>

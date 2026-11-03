@@ -18,6 +18,8 @@ export type ProjectFull = {
   id: string;
   title: string;
   points: number;
+  vacancies: number;
+  filled_vacancies: number;
   notes: string | null;
   links: LinkInput[];
   opened_at: string;
@@ -67,7 +69,7 @@ type ProjectFullRaw = Omit<ProjectFull, 'funnel' | 'freelancer_rates'> & { funne
 async function fetchProjectFull(id: string): Promise<ProjectFull | null> {
   const rows = (await sql`
     SELECT
-      p.id, p.title, p.points, p.notes, p.links, p.opened_at, p.closed_at, p.is_archived,
+      p.id, p.title, p.points, p.vacancies, p.filled_vacancies, p.notes, p.links, p.opened_at, p.closed_at, p.is_archived,
       p.disable_stages, p.funnel, p.freelancer_rates,
       c.id AS client_id, c.name AS client_name,
       pt.id AS type_id, pt.name AS type_name,
@@ -183,6 +185,38 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
 
       setClauses.push(`title = $${i++}`);
       values.push(title);
+    }
+
+    if ('vacancies' in body) {
+      const vacancies = Number(body.vacancies);
+      if (!Number.isInteger(vacancies) || vacancies < 1 || vacancies > 50) {
+        return NextResponse.json(
+          { ok: false, error: 'Liczba wakatow musi byc liczba calkowita od 1 do 50' },
+          { status: 400 }
+        );
+      }
+
+      const vacProjRows = (await sql`
+        SELECT owner_id, filled_vacancies FROM projects WHERE id = ${id}::uuid
+      `) as { owner_id: string; filled_vacancies: number }[];
+      if (!vacProjRows[0]) {
+        return NextResponse.json({ ok: false, error: 'Projekt nie istnieje' }, { status: 404 });
+      }
+      if (session.role !== 'admin' && session.sub !== vacProjRows[0].owner_id) {
+        return NextResponse.json(
+          { ok: false, error: 'Tylko admin lub owner moze zmienic liczbe wakatow' },
+          { status: 403 }
+        );
+      }
+      if (vacancies < vacProjRows[0].filled_vacancies) {
+        return NextResponse.json(
+          { ok: false, error: 'Liczba wakatow nie moze byc mniejsza niz liczba juz zrekrutowanych' },
+          { status: 400 }
+        );
+      }
+
+      setClauses.push(`vacancies = $${i++}`);
+      values.push(vacancies);
     }
 
     if ('notes' in body) {

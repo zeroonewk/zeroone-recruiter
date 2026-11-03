@@ -282,6 +282,11 @@ export default function ProjektyClient({
                             F
                           </span>
                         )}
+                        {p.vacancies > 1 && (
+                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-50 text-blue-700 shrink-0">
+                            {p.filled_vacancies}/{p.vacancies}
+                          </span>
+                        )}
                       </span>
                     </td>
                     <td className="px-4 py-3 text-gray-600">{p.client_name}</td>

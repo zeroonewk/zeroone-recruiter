@@ -67,6 +67,7 @@ export default function NowyProjektForm({ initData, currentUserId }: Props) {
   const [statusId, setStatusId] = useState(initData.default_status_id);
   const [points, setPoints] = useState(5);
   const [userTouchedPoints, setUserTouchedPoints] = useState(false);
+  const [vacancies, setVacancies] = useState(1);
   const [openedAt, setOpenedAt] = useState(today);
   const [notes, setNotes] = useState('');
   const [links, setLinks] = useState<LinkState[]>([]);
@@ -165,6 +166,9 @@ export default function NowyProjektForm({ initData, currentUserId }: Props) {
     Number.isInteger(points) &&
     points >= 0 &&
     points <= 25 &&
+    Number.isInteger(vacancies) &&
+    vacancies >= 1 &&
+    vacancies <= 50 &&
     DATE_RE.test(openedAt) &&
     (disableStages || stages.every((s) => DATE_RE.test(s.deadline))) &&
     links.every((l) => l.label.trim().length > 0 && URL_RE.test(l.url.trim()));
@@ -186,6 +190,7 @@ export default function NowyProjektForm({ initData, currentUserId }: Props) {
           owner_id: ownerId,
           status_id: statusId,
           points,
+          vacancies,
           opened_at: openedAt,
           notes: notes.trim() || null,
           links: links.map((l) => ({ label: l.label.trim(), url: l.url.trim() })),
@@ -383,6 +388,24 @@ export default function NowyProjektForm({ initData, currentUserId }: Props) {
                   </button>
                   <span className="text-xs text-gray-500 ml-1">0–25</span>
                 </div>
+              </div>
+
+              <div>
+                <label htmlFor="f-vacancies" className={labelCls}>
+                  Liczba wakatow
+                </label>
+                <input
+                  id="f-vacancies"
+                  type="number"
+                  min={1}
+                  max={50}
+                  step={1}
+                  required
+                  value={vacancies}
+                  onChange={(e) => setVacancies(Math.max(1, Math.min(50, Math.floor(Number(e.target.value)))))}
+                  className="w-24 px-2 py-2 border border-gray-300 rounded-md text-sm text-center focus:outline-none focus:ring-2 focus:ring-[#FF5A3C] focus:border-transparent"
+                />
+                <span className="text-xs text-gray-500 ml-2">1-50, domyslnie 1</span>
               </div>
             </div>
           </div>

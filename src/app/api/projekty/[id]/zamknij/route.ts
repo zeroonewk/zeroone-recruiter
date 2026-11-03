@@ -71,7 +71,7 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
 
     const [projectRows, statusRows, userCountRows, freelancerRows, candidateRows] = await Promise.all([
       sql`
-        SELECT p.points, p.owner_id, p.closed_at, p.freelancer_rates, rs.is_success AS current_is_success
+        SELECT p.points, p.owner_id, p.closed_at, p.vacancies, p.filled_vacancies, p.freelancer_rates, rs.is_success AS current_is_success
         FROM projects p
         JOIN result_statuses rs ON rs.id = p.status_id
         WHERE p.id = ${id}::uuid
@@ -90,12 +90,20 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
       points: number;
       owner_id: string;
       closed_at: string | null;
+      vacancies: number;
+      filled_vacancies: number;
       freelancer_rates: unknown;
       current_is_success: boolean;
     }[])[0];
     if (!project) {
       return NextResponse.json({ ok: false, error: 'Projekt nie istnieje' }, { status: 404 });
     }
+
+    // Dla projektow z wieloma wakatami: jesli wszystkie zostaly juz obsadzone
+    // przez /zalicz, punkty zostaly rozdane w calosci wczesniej — zamkniecie
+    // nie wymaga (i nie przyznaje) dodatkowej alokacji.
+    const pointsPool =
+      project.vacancies > 1 && project.filled_vacancies >= project.vacancies ? 0 : project.points;
 
     if (project.closed_at !== null || project.current_is_success) {
       return NextResponse.json(
@@ -119,14 +127,20 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
       return NextResponse.json({ ok: false, error: 'Brak uprawnien' }, { status: 403 });
     }
 
-    if (project.points === 0 && parsed.length > 0) {
+    if (pointsPool === 0 && parsed.length > 0) {
       return NextResponse.json(
-        { ok: false, error: 'Projekt z 0 punktami nie wymaga alokacji' },
+        {
+          ok: false,
+          error:
+            project.points === 0
+              ? 'Projekt z 0 punktami nie wymaga alokacji'
+              : 'Wszystkie wakaty zostaly juz obsadzone, alokacja punktow nie jest wymagana',
+        },
         { status: 400 }
       );
     }
 
-    if (project.points > 0) {
+    if (pointsPool > 0) {
       if (parsed.length === 0) {
         return NextResponse.json({ ok: false, error: 'Brak alokacji punktow' }, { status: 400 });
       }
@@ -138,11 +152,11 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
         );
       }
       const totalPoints = parsed.reduce((acc, a) => acc + a.points, 0);
-      if (totalPoints !== project.points) {
+      if (totalPoints !== pointsPool) {
         return NextResponse.json(
           {
             ok: false,
-            error: `Suma punktow alokacji (${totalPoints}) musi rownic sie puli projektu (${project.points})`,
+            error: `Suma punktow alokacji (${totalPoints}) musi rownic sie puli projektu (${pointsPool})`,
           },
           { status: 400 }
         );

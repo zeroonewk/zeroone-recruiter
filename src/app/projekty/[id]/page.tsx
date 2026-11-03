@@ -21,6 +21,8 @@ type ProjectRowRaw = {
   id: string;
   title: string;
   points: number;
+  vacancies: number;
+  filled_vacancies: number;
   notes: string | null;
   links: unknown;
   opened_at: unknown;
@@ -65,7 +67,7 @@ export default async function ProjektDetailPage({
   const [projectRows, stageRows, statusRows, userRows, freelancerRows, projectFreelancerRows, snapshotRows] = await Promise.all([
     sql`
       SELECT
-        p.id, p.title, p.points, p.notes, p.links, p.opened_at, p.closed_at, p.is_archived,
+        p.id, p.title, p.points, p.vacancies, p.filled_vacancies, p.notes, p.links, p.opened_at, p.closed_at, p.is_archived,
         p.disable_stages, p.funnel, p.freelancer_rates,
         c.id AS client_id, c.name AS client_name,
         pt.id AS type_id, pt.name AS type_name,
@@ -120,6 +122,8 @@ export default async function ProjektDetailPage({
     id: raw.id,
     title: raw.title,
     points: raw.points,
+    vacancies: raw.vacancies,
+    filled_vacancies: raw.filled_vacancies,
     notes: raw.notes,
     links: Array.isArray(raw.links) ? (raw.links as { label: string; url: string }[]) : [],
     opened_at: toDateString(raw.opened_at) ?? '',
