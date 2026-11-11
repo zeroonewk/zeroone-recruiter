@@ -583,9 +583,9 @@ function FunnelWidget({ data }: { data: FunnelData }) {
                   <span className="text-xs text-gray-500">Baza</span>
                 ) : (
                   <>
-                    <div>{prevValue !== null ? pct(value, prevValue) : '—'}</div>
+                    <div>{(prevValue !== null ? pct(value, prevValue) : null) ?? '—'}</div>
                     <div className="text-xs text-gray-500 mt-0.5">
-                      {pct(value, data.sourcing)} od bazy
+                      {pct(value, data.sourcing) ?? '—'} od bazy
                     </div>
                   </>
                 )}

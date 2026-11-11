@@ -30,7 +30,54 @@ export function normalizeFunnel(raw: unknown): FunnelData {
   return out;
 }
 
-export function pct(num: number, den: number): string {
-  if (den === 0) return '—';
-  return `${(num / den * 100).toFixed(1)}%`;
+function isUsableNumber(v: unknown): v is number {
+  return typeof v === 'number' && Number.isFinite(v);
+}
+
+// Konwersja num/den w procentach. null, gdy baza (den) jest pusta, 0, ujemna
+// albo nie jest liczba — wtedy w UI pokazujemy "—" zamiast 0%, Infinity
+// czy wartosci > 100% liczonych od pustej bazy.
+export function conversionRate(num: unknown, den: unknown): number | null {
+  if (!isUsableNumber(den) || den <= 0) return null;
+  if (!isUsableNumber(num) || num < 0) return null;
+  return (num / den) * 100;
+}
+
+// Sformatowana konwersja ("12.5%") albo null przy pustej bazie.
+// Wywolujacy pokazuje "—" dla null: `pct(a, b) ?? '—'`.
+export function pct(num: unknown, den: unknown): string | null {
+  const rate = conversionRate(num, den);
+  return rate === null ? null : `${rate.toFixed(1)}%`;
+}
+
+export type FunnelInconsistency = {
+  key: FunnelKey;
+  label: string;
+  value: number;
+  prevKey: FunnelKey;
+  prevLabel: string;
+  prevValue: number;
+};
+
+// Poziomy, ktorych wartosc jest wieksza niz poprzedniego poziomu.
+// Liczone tylko gdy poprzedni poziom > 0 (przy pustym poprzednim jest samo "—").
+export function funnelInconsistencies(f: FunnelData): FunnelInconsistency[] {
+  const out: FunnelInconsistency[] = [];
+  for (let i = 1; i < FUNNEL_LEVELS.length; i++) {
+    const lvl = FUNNEL_LEVELS[i];
+    const prev = FUNNEL_LEVELS[i - 1];
+    const value = f[lvl.key];
+    const prevValue = f[prev.key];
+    if (isUsableNumber(prevValue) && prevValue > 0 && isUsableNumber(value) && value > prevValue) {
+      out.push({
+        key: lvl.key,
+        label: lvl.label,
+        value,
+        prevKey: prev.key,
+        prevLabel: prev.label,
+        prevValue,
+      });
+    }
+  }
+  return out;
 }

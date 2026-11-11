@@ -1,7 +1,13 @@
 'use client';
 
 import { useState } from 'react';
-import { FUNNEL_LEVELS, pct, type FunnelData, type FunnelKey } from '@/lib/funnel';
+import {
+  FUNNEL_LEVELS,
+  pct,
+  funnelInconsistencies,
+  type FunnelData,
+  type FunnelKey,
+} from '@/lib/funnel';
 
 type Props = {
   projectId: string;
@@ -41,6 +47,9 @@ export default function FunnelCard({ projectId, initialFunnel, weekAgoFunnel, on
     }
   }
 
+  // Ostrzezenia o niespojnosci (poziom N > poziom N-1). Tylko informacja — zapis bez zmian.
+  const inconsistencyByKey = new Map(funnelInconsistencies(funnel).map((w) => [w.key, w]));
+
   return (
     <div className="bg-white border border-gray-200 rounded-lg p-6">
       <h2 className="text-xl font-bold mb-1">Lejek procesu</h2>
@@ -77,74 +86,77 @@ export default function FunnelCard({ projectId, initialFunnel, weekAgoFunnel, on
         const weekAgoWidth = base === 0 ? '0%' : `${Math.min(100, (weekAgo / base) * 100)}%`;
         const deltaWidth = base === 0 ? '0%' : `${Math.min(100, (delta / base) * 100)}%`;
 
-        const conversionMain =
-          idx === 0
-            ? '—'
-            : prevValue === null || prevValue === 0
-            ? '—'
-            : `${(value / prevValue * 100).toFixed(1)}% vs ${prev!.label}`;
+        // Konwersja vs poprzedni poziom i vs Sourcing — liczone osobno, null przy pustej bazie.
+        const vsPrev = prev && prevValue !== null ? pct(value, prevValue) : null;
+        const conversionMain = vsPrev === null ? '—' : `${vsPrev} vs ${prev!.label}`;
+        const vsBase = pct(value, funnel.sourcing) ?? '—';
+        const warning = inconsistencyByKey.get(lvl.key);
 
         return (
-          <div
-            key={lvl.key}
-            className="grid grid-cols-[minmax(0,1fr)_96px_minmax(0,2fr)_180px] gap-4 items-center py-1.5 border-b border-gray-50 last:border-0"
-          >
-            {/* Column 1: Level */}
-            <div>
-              <div className="font-medium text-sm text-gray-900">
-                {idx + 1}. {lvl.label}
+          <div key={lvl.key} className="border-b border-gray-50 last:border-0">
+            <div className="grid grid-cols-[minmax(0,1fr)_96px_minmax(0,2fr)_180px] gap-4 items-center py-1.5">
+              {/* Column 1: Level */}
+              <div>
+                <div className="font-medium text-sm text-gray-900">
+                  {idx + 1}. {lvl.label}
+                </div>
+                <div className="text-xs text-gray-500 mt-0.5">{lvl.description}</div>
               </div>
-              <div className="text-xs text-gray-500 mt-0.5">{lvl.description}</div>
-            </div>
 
-            {/* Column 2: Input */}
-            <input
-              type="number"
-              min={0}
-              step={1}
-              value={value}
-              disabled={saving[lvl.key] === true}
-              onChange={(e) => {
-                const v = Math.max(0, Math.floor(Number(e.target.value) || 0));
-                setFunnel((prev) => ({ ...prev, [lvl.key]: v }));
-              }}
-              onBlur={(e) => {
-                const v = Math.max(0, Math.floor(Number(e.target.value) || 0));
-                void handleBlur(lvl.key, v);
-              }}
-              className="w-24 px-3 py-2 border border-gray-300 rounded-md text-right focus:outline-none focus:ring-2 focus:ring-[#FF5A3C] disabled:opacity-60 disabled:cursor-not-allowed"
-            />
+              {/* Column 2: Input */}
+              <input
+                type="number"
+                min={0}
+                step={1}
+                value={value}
+                disabled={saving[lvl.key] === true}
+                onChange={(e) => {
+                  const v = Math.max(0, Math.floor(Number(e.target.value) || 0));
+                  setFunnel((prev) => ({ ...prev, [lvl.key]: v }));
+                }}
+                onBlur={(e) => {
+                  const v = Math.max(0, Math.floor(Number(e.target.value) || 0));
+                  void handleBlur(lvl.key, v);
+                }}
+                className="w-24 px-3 py-2 border border-gray-300 rounded-md text-right focus:outline-none focus:ring-2 focus:ring-[#FF5A3C] disabled:opacity-60 disabled:cursor-not-allowed"
+              />
 
-            {/* Column 3: Bar */}
-            {weekAgoFunnel != null ? (
-              <div className="w-full bg-gray-100 rounded-full h-2.5 flex overflow-hidden">
-                <div
-                  className="bg-[#FF5A3C] h-2.5 flex-none"
-                  style={{ width: weekAgoWidth }}
-                />
-                {delta > 0 && (
+              {/* Column 3: Bar */}
+              {weekAgoFunnel != null ? (
+                <div className="w-full bg-gray-100 rounded-full h-2.5 flex overflow-hidden">
                   <div
-                    className="bg-blue-500 h-2.5 flex-none"
-                    style={{ width: deltaWidth }}
+                    className="bg-[#FF5A3C] h-2.5 flex-none"
+                    style={{ width: weekAgoWidth }}
                   />
-                )}
+                  {delta > 0 && (
+                    <div
+                      className="bg-blue-500 h-2.5 flex-none"
+                      style={{ width: deltaWidth }}
+                    />
+                  )}
+                </div>
+              ) : (
+                <div className="w-full bg-gray-100 rounded-full h-2.5">
+                  <div
+                    className="bg-[#FF5A3C] h-2.5 rounded-full transition-all"
+                    style={{ width: barWidth }}
+                  />
+                </div>
+              )}
+
+              {/* Column 4: Conversion */}
+              <div className="text-right">
+                <div className="font-medium text-gray-900 text-sm">{conversionMain}</div>
+                <div className="text-xs text-gray-500 mt-0.5">
+                  {idx === 0 ? 'Baza lejka' : `${vsBase} od bazy`}
+                </div>
               </div>
-            ) : (
-              <div className="w-full bg-gray-100 rounded-full h-2.5">
-                <div
-                  className="bg-[#FF5A3C] h-2.5 rounded-full transition-all"
-                  style={{ width: barWidth }}
-                />
+            </div>
+            {warning && (
+              <div className="mb-1.5 px-2 py-1 rounded bg-yellow-50 text-yellow-800 text-xs">
+                {warning.label} ({warning.value}) wiekszy niz {warning.prevLabel} ({warning.prevValue}) - na pewno?
               </div>
             )}
-
-            {/* Column 4: Conversion */}
-            <div className="text-right">
-              <div className="font-medium text-gray-900 text-sm">{conversionMain}</div>
-              <div className="text-xs text-gray-500 mt-0.5">
-                {idx === 0 ? 'Baza lejka' : `${pct(value, funnel.sourcing)} od bazy`}
-              </div>
-            </div>
           </div>
         );
       })}
