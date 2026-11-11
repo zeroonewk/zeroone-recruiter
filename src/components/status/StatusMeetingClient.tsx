@@ -6,6 +6,8 @@ import Link from 'next/link';
 import { FUNNEL_LEVELS } from '@/lib/funnel';
 import { formatRangePL } from '@/lib/date-ranges';
 import type { PeriodKey, DateRange, Trend } from '@/lib/date-ranges';
+import { countAlerts, type ProjectAlert } from '@/lib/alerts-shared';
+import AlertList from '@/components/alerts/AlertList';
 
 // ── Exported types (imported by page.tsx) ─────────────────────────────────────
 
@@ -49,17 +51,6 @@ export type FunnelDelta = {
   total_delta: number;
 };
 
-export type OverdueStage = {
-  id: string;
-  stage_name: string;
-  deadline: string;
-  days_overdue: number;
-  project_id: string;
-  project_title: string;
-  client_name: string;
-  owner_name: string;
-};
-
 export type UpcomingStage = {
   id: string;
   stage_name: string;
@@ -69,15 +60,6 @@ export type UpcomingStage = {
   project_title: string;
   client_name: string;
   owner_name: string;
-};
-
-export type InactiveProject = {
-  id: string;
-  title: string;
-  client_name: string;
-  owner_name: string;
-  updated_at: string | null;
-  opened_at: string;
 };
 
 export type StatusNumbers = {
@@ -95,9 +77,8 @@ type Props = {
     closedProjects: ClosedProject[];
     newProjects: NewProject[];
     funnelDeltas: FunnelDelta[];
-    overdueStages: OverdueStage[];
+    alerts: ProjectAlert[];
     upcomingStages: UpcomingStage[];
-    inactiveProjects: InactiveProject[];
     numbers: StatusNumbers;
   };
   availableUsers: { id: string; name: string }[];
@@ -188,7 +169,8 @@ export default function StatusMeetingClient({
   const [customOd, setCustomOd] = useState(customRange?.od ?? '');
   const [customDo, setCustomDo] = useState(customRange?.do ?? '');
 
-  const { closedStages, closedProjects, newProjects, funnelDeltas, overdueStages, upcomingStages, inactiveProjects, numbers } = initialData;
+  const { closedStages, closedProjects, newProjects, funnelDeltas, alerts, upcomingStages, numbers } = initialData;
+  const alertCounts = countAlerts(alerts);
 
   function navigate(updates: { okres?: string; rekruter?: string; od?: string; do?: string }) {
     const sp = new URLSearchParams();
@@ -469,36 +451,24 @@ export default function StatusMeetingClient({
 
       {/* ── Wymaga uwagi ─────────────────────────────────────────────────── */}
       <div>
-        <h2 className="text-lg font-semibold text-gray-900 mb-4">Wymaga uwagi</h2>
+        <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 mb-4">
+          <h2 className="text-lg font-semibold text-gray-900">Wymaga uwagi</h2>
+          <span className="text-sm text-gray-600">
+            <span className="font-medium text-red-700">Krytyczne: {alertCounts.critical}</span>
+            {' | '}
+            <span className="font-medium text-orange-700">Ostrzezenia: {alertCounts.warning}</span>
+          </span>
+        </div>
         <div className="space-y-4">
 
-          {/* Przeterminowane */}
+          {/* Klasyfikacja projektow wg progow alertow */}
           <div className={cardCls}>
-            <h3 className="text-base font-semibold text-red-700 mb-4">
-              Przeterminowane
-              <InfoTip text="Etapy projektowe z deadlinem w przeszlosci ktore nie zostaly zamkniete. Wymagaja natychmiastowej uwagi." />
-              <span className="ml-2 text-sm font-normal text-red-500">({overdueStages.length})</span>
+            <h3 className="text-base font-semibold text-gray-900 mb-4">
+              Projekty
+              <InfoTip text="Jeden wiersz na projekt. Krytyczne: etap po terminie ponad prog, priorytet 1 po terminie ponad prog lub brak aktywnosci ponad prog (Ustawienia > Progi alertow). Ostrzezenia: etapy po terminie ponizej progow. W toku rownolegle: zalegly etap, ale pozniejszy etap jest juz zamkniety." />
+              <span className="ml-2 text-sm font-normal text-gray-500">({alerts.length})</span>
             </h3>
-            {overdueStages.length === 0 ? (
-              <p className={emptyTextCls}>Brak przeterminowanych etapow</p>
-            ) : (
-              <ul className="space-y-2">
-                {overdueStages.map((s) => (
-                  <li key={s.id} className="flex items-start gap-3 text-sm">
-                    <span className="shrink-0 font-medium text-red-600 w-24">{fmtDate(s.deadline)}</span>
-                    <div className="min-w-0 flex-1">
-                      <Link href={`/projekty/${s.project_id}`} className="font-medium text-gray-900 hover:text-[#FF5A3C] truncate block">
-                        {s.project_title}
-                      </Link>
-                      <p className="text-gray-500 truncate">{s.stage_name} · {s.client_name} · {s.owner_name}</p>
-                    </div>
-                    <span className="shrink-0 text-xs font-medium text-red-600 bg-red-50 px-2 py-0.5 rounded">
-                      +{s.days_overdue} dni
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            )}
+            <AlertList alerts={alerts} />
           </div>
 
           {/* Zblizajace */}
@@ -527,36 +497,6 @@ export default function StatusMeetingClient({
                   </div>
                 ))}
               </div>
-            )}
-          </div>
-
-          {/* Bez aktywnosci */}
-          <div className={cardCls}>
-            <h3 className="text-base font-semibold text-orange-700 mb-4">
-              Bez aktywnosci (&gt;7 dni)
-              <InfoTip text="Projekty bez zadnej zmiany od ponad 7 dni (brak edycji projektu, brak zamknietego etapu)." />
-              <span className="ml-2 text-sm font-normal text-orange-500">({inactiveProjects.length})</span>
-            </h3>
-            {inactiveProjects.length === 0 ? (
-              <p className={emptyTextCls}>Brak projektow bez aktywnosci</p>
-            ) : (
-              <ul className="space-y-2">
-                {inactiveProjects.map((p) => (
-                  <li key={p.id} className="flex items-start gap-3 text-sm">
-                    <div className="min-w-0 flex-1">
-                      <Link href={`/projekty/${p.id}`} className="font-medium text-gray-900 hover:text-[#FF5A3C] truncate block">
-                        {p.title}
-                      </Link>
-                      <p className="text-gray-500 truncate">{p.client_name} · {p.owner_name}</p>
-                    </div>
-                    {p.updated_at && (
-                      <span className="shrink-0 text-xs text-orange-700 bg-orange-50 px-2 py-0.5 rounded">
-                        ost. {fmtDate(p.updated_at)}
-                      </span>
-                    )}
-                  </li>
-                ))}
-              </ul>
             )}
           </div>
 

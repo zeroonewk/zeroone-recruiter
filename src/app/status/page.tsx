@@ -7,6 +7,7 @@ import { toDateString } from '@/lib/dates';
 import { getDateRange, getComparisonRange, calculateTrend } from '@/lib/date-ranges';
 import type { Trend } from '@/lib/date-ranges';
 import { normalizeFunnel, FUNNEL_LEVELS } from '@/lib/funnel';
+import { loadAlertSettings, classifyProjects } from '@/lib/alerts';
 import AppShell from '@/components/layout/AppShell';
 import StatusMeetingClient from '@/components/status/StatusMeetingClient';
 import type {
@@ -14,9 +15,7 @@ import type {
   ClosedProject,
   NewProject,
   FunnelDelta,
-  OverdueStage,
   UpcomingStage,
-  InactiveProject,
   StatusNumbers,
 } from '@/components/status/StatusMeetingClient';
 import type { PeriodKey } from '@/lib/date-ranges';
@@ -65,17 +64,6 @@ type FunnelDeltaRaw = {
   start_funnel: unknown;
 };
 
-type OverdueStageRaw = {
-  id: string;
-  stage_name: string;
-  deadline: unknown;
-  days_overdue: number;
-  project_id: string;
-  project_title: string;
-  client_name: string;
-  owner_name: string;
-};
-
 type UpcomingStageRaw = {
   id: string;
   stage_name: string;
@@ -85,15 +73,6 @@ type UpcomingStageRaw = {
   project_title: string;
   client_name: string;
   owner_name: string;
-};
-
-type InactiveProjectRaw = {
-  id: string;
-  title: string;
-  client_name: string;
-  owner_name: string;
-  updated_at: unknown;
-  opened_at: unknown;
 };
 
 type UserRow = { id: string; name: string };
@@ -164,9 +143,8 @@ export default async function StatusPage({
     closedProjectsRaw,
     newProjectsRaw,
     funnelDeltaRaw,
-    overdueRaw,
+    alerts,
     upcomingRaw,
-    inactiveRaw,
     numbersRaw,
     numbersPrevRaw,
     usersRaw,
@@ -253,28 +231,8 @@ export default async function StatusPage({
       [userId, start, end]
     ),
 
-    // Przeterminowane etapy
-    sql.query(
-      `SELECT
-        ps.id, ps.name AS stage_name, ps.deadline,
-        (CURRENT_DATE - ps.deadline)::int AS days_overdue,
-        p.id AS project_id, p.title AS project_title,
-        c.name AS client_name, u.name AS owner_name
-       FROM project_stages ps
-       JOIN projects p ON p.id = ps.project_id
-       JOIN clients c ON c.id = p.client_id
-       JOIN users u ON u.id = p.owner_id
-       JOIN result_statuses rs ON rs.id = p.status_id
-       WHERE ps.done_at IS NULL
-         AND ps.deadline < CURRENT_DATE
-         AND p.is_archived = FALSE
-         AND rs.is_success = FALSE
-         AND p.closed_at IS NULL
-         AND ($1::uuid IS NULL OR p.owner_id = $1::uuid)
-       ORDER BY ps.deadline ASC
-       LIMIT 50`,
-      [userId]
-    ),
+    // Wymaga uwagi — klasyfikacja projektow wg progow alertow
+    loadAlertSettings().then((settings) => classifyProjects(settings, { ownerId: userId })),
 
     // Zblizajace sie — deadline w ciagu 3 dni
     sql.query(
@@ -296,33 +254,6 @@ export default async function StatusPage({
          AND ($1::uuid IS NULL OR p.owner_id = $1::uuid)
        ORDER BY ps.deadline ASC
        LIMIT 30`,
-      [userId]
-    ),
-
-    // Projekty bez aktywnosci >7 dni
-    sql.query(
-      `WITH recent_activity AS (
-         SELECT project_id, MAX(done_at) AS last_done
-         FROM project_stages
-         WHERE done_at >= CURRENT_DATE - INTERVAL '7 days'
-         GROUP BY project_id
-       )
-       SELECT
-         p.id, p.title, c.name AS client_name, u.name AS owner_name,
-         p.updated_at, p.opened_at
-       FROM projects p
-       JOIN clients c ON c.id = p.client_id
-       JOIN users u ON u.id = p.owner_id
-       JOIN result_statuses rs ON rs.id = p.status_id
-       LEFT JOIN recent_activity ra ON ra.project_id = p.id
-       WHERE p.is_archived = FALSE
-         AND rs.is_success = FALSE
-         AND p.closed_at IS NULL
-         AND p.updated_at < NOW() - INTERVAL '7 days'
-         AND ra.last_done IS NULL
-         AND ($1::uuid IS NULL OR p.owner_id = $1::uuid)
-       ORDER BY p.updated_at ASC
-       LIMIT 20`,
       [userId]
     ),
 
@@ -435,17 +366,6 @@ export default async function StatusPage({
     .filter((d) => d.total_delta > 0)
     .sort((a, b) => b.total_delta - a.total_delta);
 
-  const overdueStages: OverdueStage[] = (overdueRaw as OverdueStageRaw[]).map((r) => ({
-    id: r.id,
-    stage_name: r.stage_name,
-    deadline: toDateString(r.deadline) ?? '',
-    days_overdue: r.days_overdue,
-    project_id: r.project_id,
-    project_title: r.project_title,
-    client_name: r.client_name,
-    owner_name: r.owner_name,
-  }));
-
   const upcomingStages: UpcomingStage[] = (upcomingRaw as UpcomingStageRaw[]).map((r) => ({
     id: r.id,
     stage_name: r.stage_name,
@@ -455,15 +375,6 @@ export default async function StatusPage({
     project_title: r.project_title,
     client_name: r.client_name,
     owner_name: r.owner_name,
-  }));
-
-  const inactiveProjects: InactiveProject[] = (inactiveRaw as InactiveProjectRaw[]).map((r) => ({
-    id: r.id,
-    title: r.title,
-    client_name: r.client_name,
-    owner_name: r.owner_name,
-    updated_at: toDateString(r.updated_at),
-    opened_at: toDateString(r.opened_at) ?? '',
   }));
 
   const numbersRow = (numbersRaw as StatusNumbers[])[0] ?? {
@@ -500,9 +411,8 @@ export default async function StatusPage({
           closedProjects,
           newProjects,
           funnelDeltas,
-          overdueStages,
+          alerts,
           upcomingStages,
-          inactiveProjects,
           numbers: numbersRow,
         }}
         availableUsers={usersRaw as UserRow[]}

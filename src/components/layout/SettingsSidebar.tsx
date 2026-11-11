@@ -51,6 +51,18 @@ export default function SettingsSidebar({ userRole }: Props) {
         )}
         {userRole === 'admin' && (
           <Link
+            href="/ustawienia/progi-alertow"
+            className={`block px-3 py-2 rounded-md text-sm transition-colors ${
+              pathname === '/ustawienia/progi-alertow'
+                ? 'bg-[#FF5A3C]/10 text-[#FF5A3C] font-medium'
+                : 'text-gray-700 hover:bg-gray-100'
+            }`}
+          >
+            Progi alertow
+          </Link>
+        )}
+        {userRole === 'admin' && (
+          <Link
             href="/ustawienia/przesun-terminy"
             className={`block px-3 py-2 rounded-md text-sm transition-colors ${
               pathname === '/ustawienia/przesun-terminy'

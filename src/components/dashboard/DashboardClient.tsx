@@ -2,6 +2,8 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import type { ProjectAlert } from '@/lib/alerts-shared';
+import { AlertBadge } from '@/components/alerts/AlertList';
 import { useRouter } from 'next/navigation';
 import { FUNNEL_LEVELS, pct, type FunnelData } from '@/lib/funnel';
 import {
@@ -24,16 +26,9 @@ export type Period = 'month' | 'prev_month' | 'quarter' | 'year' | 'all';
 
 export type DashboardData = {
   redProjects: {
-    total: number;
-    items: {
-      id: string;
-      title: string;
-      client_name: string;
-      owner_name: string;
-      stage_name: string;
-      stage_deadline: string;
-      days_overdue: number;
-    }[];
+    critical: number;
+    warning: number;
+    items: ProjectAlert[];
   };
   workload: { id: string; name: string; active_count: number; priority_count: number }[];
   freelancerProjectCount: number;
@@ -153,17 +148,18 @@ export default function DashboardClient({ initialData, period }: Props) {
           <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">
             Wymagaja uwagi
           </p>
-          <p className="text-4xl font-bold text-red-600 leading-none">{redProjects.total}</p>
-          <p className="text-sm text-gray-600 mt-1">
-            {redProjects.total === 1
-              ? 'projekt'
-              : redProjects.total < 5
-              ? 'projekty'
-              : 'projektow'}{' '}
-            przeterminowanych
-          </p>
+          <div className="flex items-end gap-6">
+            <div>
+              <p className="text-4xl font-bold text-red-600 leading-none">{redProjects.critical}</p>
+              <p className="text-sm text-gray-600 mt-1">Krytyczne</p>
+            </div>
+            <div>
+              <p className="text-4xl font-bold text-orange-500 leading-none">{redProjects.warning}</p>
+              <p className="text-sm text-gray-600 mt-1">Ostrzezenia</p>
+            </div>
+          </div>
 
-          {redProjects.total === 0 ? (
+          {redProjects.critical + redProjects.warning === 0 ? (
             <div className="flex items-center gap-2 mt-4 text-green-700">
               <span className="inline-block w-2.5 h-2.5 rounded-full bg-green-500 shrink-0" />
               <span className="text-sm font-medium">Wszystko na czas</span>
@@ -182,15 +178,17 @@ export default function DashboardClient({ initialData, period }: Props) {
             >
               {redProjects.items.map((item) => (
                 <Link
-                  key={item.id}
-                  href={`/projekty/${item.id}`}
-                  aria-label={`${item.title} — ${item.days_overdue} ${item.days_overdue === 1 ? 'dzien' : 'dni'} po terminie`}
+                  key={item.project_id}
+                  href={`/projekty/${item.project_id}`}
+                  aria-label={`${item.title} — ${item.reasons.join(', ')}`}
                   className="block px-2 py-1.5 rounded-md hover:bg-red-50 transition-colors -mx-2"
                 >
-                  <p className="text-sm font-medium text-gray-900 truncate">{item.title}</p>
+                  <div className="flex items-center gap-2 min-w-0">
+                    <AlertBadge level={item.level} />
+                    <p className="text-sm font-medium text-gray-900 truncate">{item.title}</p>
+                  </div>
                   <p className="text-xs text-gray-500 mt-0.5 truncate">
-                    {item.client_name} · Etap: {item.stage_name} ·{' '}
-                    {item.days_overdue} {item.days_overdue === 1 ? 'dzien' : 'dni'} po terminie
+                    {item.client_name} · {item.reasons[0] ?? ''}
                   </p>
                 </Link>
               ))}

@@ -1,23 +1,13 @@
 import { redirect } from 'next/navigation';
 import { getSession } from '@/lib/auth';
 import { sql } from '@/lib/db';
-import { toDateString } from '@/lib/dates';
 import { normalizeFunnel } from '@/lib/funnel';
+import { loadAlertSettings, classifyProjects, countAlerts } from '@/lib/alerts';
 import AppShell from '@/components/layout/AppShell';
 import DashboardClient from '@/components/dashboard/DashboardClient';
 import type { DashboardData, Period } from '@/components/dashboard/DashboardClient';
 
 // ── Raw row types (Neon returns Date objects for date columns) ─────────────────
-
-type RedProjectRaw = {
-  id: string;
-  title: string;
-  client_name: string;
-  owner_name: string;
-  stage_name: string;
-  stage_deadline: unknown;
-  days_overdue: number;
-};
 
 type WorkloadRow = { id: string; name: string; active_count: number; priority_count: number };
 type StageOverviewRow = { stage_name: string; position: number; project_count: number };
@@ -420,7 +410,7 @@ export default async function DashboardPage({
   // ── Outer Promise.all ──────────────────────────────────────────────────────
 
   const [
-    redRaw,
+    alerts,
     workloadRaw,
     stagesRaw,
     pointsResult,
@@ -431,30 +421,8 @@ export default async function DashboardPage({
     freelancerCountRaw,
     prioritySplitRaw,
   ] = await Promise.all([
-    // Red (overdue) projects — operational, always current state
-    sql`
-      SELECT
-        p.id, p.title, c.name AS client_name, u.name AS owner_name,
-        cur_stage.name AS stage_name, cur_stage.deadline AS stage_deadline,
-        (CURRENT_DATE - cur_stage.deadline)::int AS days_overdue
-      FROM projects p
-      JOIN clients c ON c.id = p.client_id
-      JOIN users u ON u.id = p.owner_id
-      JOIN result_statuses rs ON rs.id = p.status_id
-      JOIN LATERAL (
-        SELECT name, deadline
-        FROM project_stages
-        WHERE project_id = p.id
-          AND done_at IS NULL
-          AND deadline < CURRENT_DATE
-        ORDER BY deadline ASC
-        LIMIT 1
-      ) cur_stage ON true
-      WHERE p.is_archived = FALSE
-        AND rs.is_success = FALSE
-      ORDER BY cur_stage.deadline ASC
-      LIMIT 100
-    `,
+    // Wymaga uwagi — klasyfikacja wg progow alertow, zawsze stan biezacy
+    loadAlertSettings().then((settings) => classifyProjects(settings)),
     workloadPromise,
     stagesPromise,
     pointsPromise,
@@ -468,18 +436,11 @@ export default async function DashboardPage({
 
   // ── Process results ────────────────────────────────────────────────────────
 
-  const redRows = redRaw as RedProjectRaw[];
+  const alertCounts = countAlerts(alerts);
   const redProjects = {
-    total: redRows.length,
-    items: redRows.slice(0, 3).map((r) => ({
-      id: r.id,
-      title: r.title,
-      client_name: r.client_name,
-      owner_name: r.owner_name,
-      stage_name: r.stage_name,
-      stage_deadline: toDateString(r.stage_deadline) ?? '',
-      days_overdue: r.days_overdue,
-    })),
+    critical: alertCounts.critical,
+    warning: alertCounts.warning,
+    items: alerts.filter((a) => a.level !== 'parallel').slice(0, 10),
   };
 
   const ptTotalRaw = pointsResult[0] as PointTotalRow[];
