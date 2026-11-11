@@ -49,6 +49,18 @@ export default function SettingsSidebar({ userRole }: Props) {
             Uzytkownicy
           </Link>
         )}
+        {userRole === 'admin' && (
+          <Link
+            href="/ustawienia/przesun-terminy"
+            className={`block px-3 py-2 rounded-md text-sm transition-colors ${
+              pathname === '/ustawienia/przesun-terminy'
+                ? 'bg-[#FF5A3C]/10 text-[#FF5A3C] font-medium'
+                : 'text-gray-700 hover:bg-gray-100'
+            }`}
+          >
+            Przesun terminy
+          </Link>
+        )}
       </nav>
     </aside>
   );
