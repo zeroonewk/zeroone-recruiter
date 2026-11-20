@@ -156,6 +156,7 @@ const METRIC_INFO = {
   new_projects: 'Projekty otwarte (data otwarcia) w wybranym okresie.',
   success_points: 'Suma punktow rekruterow z projektow zamknietych z sukcesem w okresie.',
   freelancer_recs: 'Liczba kandydatow zgloszonych przez freelancerow (data zgloszenia) w wybranym okresie.',
+  freelancer_meetings: 'Kandydaci zgloszeni przez freelancera w okresie, ktorzy doszli do Etapu 2 (spotkanie z klientem) lub dalej. Liczone wg daty zgloszenia kandydata.',
 } as const;
 
 const ANALYSIS_ITEMS: { key: keyof StatusNumbers; label: string }[] = [
@@ -164,6 +165,7 @@ const ANALYSIS_ITEMS: { key: keyof StatusNumbers; label: string }[] = [
   { key: 'new_projects', label: 'Nowe projekty' },
   { key: 'success_points', label: 'Punkty zdobyte' },
   { key: 'freelancer_recs', label: 'Rekomendacje freelancerow' },
+  { key: 'freelancer_meetings', label: 'Spotkania z klientem (freelancerzy)' },
 ];
 
 // Baza < 5: roznica bezwzgledna ("2 -> 4"); baza >= 5: procent ze strzalka; oba 0: "-".
@@ -223,8 +225,12 @@ export default function StatusMeetingClient({
 
   const { closedStages, closedProjects, newProjects, funnelDeltas, alerts, upcomingStages, numbers, prevNumbers, freelancerRecs } = initialData;
   const recTotals = freelancerRecs.reduce(
-    (acc, r) => ({ submitted: acc.submitted + r.submitted, accepted: acc.accepted + r.accepted }),
-    { submitted: 0, accepted: 0 }
+    (acc, r) => ({
+      submitted: acc.submitted + r.submitted,
+      accepted: acc.accepted + r.accepted,
+      meetings: acc.meetings + r.meetings,
+    }),
+    { submitted: 0, accepted: 0, meetings: 0 }
   );
   const alertCounts = countAlerts(alerts);
 
@@ -400,7 +406,11 @@ export default function StatusMeetingClient({
                 <tr className="border-b border-gray-200 text-left text-xs text-gray-500 uppercase tracking-wide">
                   <th className="py-2 pr-4 font-medium">Freelancer</th>
                   <th className="py-2 px-4 font-medium text-right">Zgloszone</th>
-                  <th className="py-2 pl-4 font-medium text-right">Zaakceptowane</th>
+                  <th className="py-2 px-4 font-medium text-right">Zaakceptowane (Etap 1)</th>
+                  <th className="py-2 pl-4 font-medium text-right">
+                    Spotkania z klientem (Etap 2)
+                    <InfoTip text={METRIC_INFO.freelancer_meetings} />
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -408,7 +418,8 @@ export default function StatusMeetingClient({
                   <tr key={r.user_id} className="border-b border-gray-100">
                     <td className="py-2 pr-4 text-gray-900">{r.name}</td>
                     <td className="py-2 px-4 text-right tabular-nums text-gray-900">{r.submitted}</td>
-                    <td className="py-2 pl-4 text-right tabular-nums text-gray-900">{r.accepted}</td>
+                    <td className="py-2 px-4 text-right tabular-nums text-gray-900">{r.accepted}</td>
+                    <td className="py-2 pl-4 text-right tabular-nums text-gray-900">{r.meetings}</td>
                   </tr>
                 ))}
               </tbody>
@@ -416,7 +427,8 @@ export default function StatusMeetingClient({
                 <tr className="font-semibold text-gray-900">
                   <td className="pt-3 pr-4">Razem</td>
                   <td className="pt-3 px-4 text-right tabular-nums">{recTotals.submitted}</td>
-                  <td className="pt-3 pl-4 text-right tabular-nums">{recTotals.accepted}</td>
+                  <td className="pt-3 px-4 text-right tabular-nums">{recTotals.accepted}</td>
+                  <td className="pt-3 pl-4 text-right tabular-nums">{recTotals.meetings}</td>
                 </tr>
               </tfoot>
             </table>
