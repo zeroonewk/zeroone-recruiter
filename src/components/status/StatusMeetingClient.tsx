@@ -5,11 +5,18 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { FUNNEL_LEVELS } from '@/lib/funnel';
 import { formatRangePL, formatRangeShortPL } from '@/lib/date-ranges';
-import type { PeriodNumbers, FreelancerRecommendation } from '@/lib/status-metrics';
+import type {
+  PeriodNumbers,
+  FreelancerRecommendation,
+  FreelancerEvent,
+  FreelancerEventLists,
+} from '@/lib/status-metrics';
 import type { PeriodKey, DateRange, Trend } from '@/lib/date-ranges';
 import { countAlerts, type ProjectAlert } from '@/lib/alerts-shared';
 import AlertList from '@/components/alerts/AlertList';
 import InfoTip from '@/components/ui/InfoTip';
+import HoverCard from '@/components/ui/HoverCard';
+import type { FloatAlign } from '@/components/ui/Floating';
 
 // ── Exported types (imported by page.tsx) ─────────────────────────────────────
 
@@ -198,6 +205,133 @@ function AnalysisBar({ value, max, color, label }: { value: number; max: number;
   );
 }
 
+// ── Dymki szczegolow w tabeli "Rekomendacje freelancerow" ────────────────────
+
+type RecListKey = keyof FreelancerEventLists;
+
+const REC_COLUMNS: {
+  list: RecListKey;
+  title: string;
+  count: (r: FreelancerRecommendation) => number;
+  align: FloatAlign;
+}[] = [
+  { list: 'submitted', title: 'Zgloszone', count: (r) => r.submitted, align: 'center' },
+  { list: 'stage1', title: 'Etap 1 - CV przyjete', count: (r) => r.accepted, align: 'center' },
+  { list: 'stage2', title: 'Etap 2 - spotkania z klientem', count: (r) => r.meetings, align: 'center' },
+  { list: 'selected', title: 'Wybrani', count: (r) => r.selected, align: 'end' },
+  { list: 'estimate', title: 'Szacunek', count: (r) => r.estimate, align: 'end' },
+];
+
+const EVENT_KIND_LABEL: Record<FreelancerEvent['kind'], string> = {
+  submitted: 'zgloszenie',
+  stage1: 'CV',
+  stage2: 'spotkanie',
+  selected: 'wybrany',
+};
+
+function fmtDM(s: string): string {
+  return `${s.slice(8, 10)}.${s.slice(5, 7)}`;
+}
+
+function EventLine({ e, withAmount }: { e: FreelancerEvent; withAmount: boolean }) {
+  if (!withAmount) {
+    return (
+      <li className="py-1">
+        <span className="text-gray-900">{e.candidate_name}</span>
+        <span className="text-gray-500"> - {e.project_title} - {fmtDM(e.date)}</span>
+      </li>
+    );
+  }
+  return (
+    <li className={`py-1 flex justify-between gap-3 ${e.included ? 'text-gray-400' : ''}`}>
+      <span className="min-w-0">
+        <span className={e.included ? '' : 'text-gray-900'}>{e.candidate_name}</span>
+        <span className={e.included ? '' : 'text-gray-500'}>
+          {' '}- {e.project_title} - {EVENT_KIND_LABEL[e.kind]} - {fmtDM(e.date)}
+        </span>
+        {e.included && <span className="block text-[11px]">wliczone w kwote za wybranego</span>}
+      </span>
+      {!e.included && (
+        <span className="shrink-0 tabular-nums font-medium text-gray-900">{fmtAmount(e.amount ?? 0)} zl</span>
+      )}
+    </li>
+  );
+}
+
+function RecDetails({
+  title,
+  groups,
+  withAmount,
+  total,
+}: {
+  title: string;
+  groups: { name?: string; events: FreelancerEvent[] }[];
+  withAmount: boolean;
+  total?: number;
+}) {
+  return (
+    <div>
+      <p className="px-3 pt-2.5 pb-1.5 font-semibold text-gray-900 border-b border-gray-100">{title}</p>
+      {/* ok. 10 pozycji, dalej przewijanie */}
+      <div className="max-h-64 overflow-y-auto px-3 py-1">
+        {groups.map((g, i) => (
+          <div key={g.name ?? i} className={i > 0 ? 'mt-2 pt-2 border-t border-gray-100' : ''}>
+            {g.name && <p className="font-semibold text-gray-700 py-0.5">{g.name}</p>}
+            <ul className="divide-y divide-gray-50">
+              {g.events.map((e, j) => (
+                <EventLine key={j} e={e} withAmount={withAmount} />
+              ))}
+            </ul>
+          </div>
+        ))}
+      </div>
+      {total !== undefined && (
+        <p className="px-3 py-2 border-t border-gray-100 flex justify-between font-semibold text-gray-900">
+          <span>Suma:</span>
+          <span className="tabular-nums">{fmtAmount(total)} zl</span>
+        </p>
+      )}
+    </div>
+  );
+}
+
+function RecCell({
+  value,
+  display,
+  title,
+  groups,
+  list,
+  align,
+  total,
+}: {
+  value: number;
+  display: string;
+  title: string;
+  groups: { name?: string; events: FreelancerEvent[] }[];
+  list: RecListKey;
+  align: FloatAlign;
+  total?: number;
+}) {
+  const hasItems = groups.some((g) => g.events.length > 0);
+  return (
+    <HoverCard
+      disabled={value === 0 || !hasItems}
+      align={align}
+      label={`${title}: szczegoly`}
+      content={
+        <RecDetails
+          title={title}
+          groups={groups.filter((g) => g.events.length > 0)}
+          withAmount={list === 'estimate'}
+          total={total}
+        />
+      }
+    >
+      {display}
+    </HoverCard>
+  );
+}
+
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export default function StatusMeetingClient({
@@ -217,16 +351,10 @@ export default function StatusMeetingClient({
   const [customDo, setCustomDo] = useState(customRange?.do ?? '');
 
   const { closedStages, closedProjects, newProjects, funnelDeltas, alerts, upcomingStages, numbers, prevNumbers, freelancerRecs } = initialData;
-  const recTotals = freelancerRecs.reduce(
-    (acc, r) => ({
-      submitted: acc.submitted + r.submitted,
-      accepted: acc.accepted + r.accepted,
-      meetings: acc.meetings + r.meetings,
-      selected: acc.selected + r.selected,
-      estimate: acc.estimate + r.estimate,
-    }),
-    { submitted: 0, accepted: 0, meetings: 0, selected: 0, estimate: 0 }
-  );
+  const recTotals: Record<RecListKey, number> = { submitted: 0, stage1: 0, stage2: 0, selected: 0, estimate: 0 };
+  for (const r of freelancerRecs) {
+    for (const col of REC_COLUMNS) recTotals[col.list] += col.count(r);
+  }
   const alertCounts = countAlerts(alerts);
 
   function navigate(updates: { okres?: string; rekruter?: string; od?: string; do?: string }) {
@@ -437,22 +565,44 @@ export default function StatusMeetingClient({
               {freelancerRecs.map((r) => (
                 <tr key={r.user_id} className="border-t border-gray-100">
                   <td className={recCellCls + ' text-left text-gray-900 truncate'} title={r.name}>{r.name}</td>
-                  <td className={recCellCls + ' text-center tabular-nums text-gray-900'}>{r.submitted}</td>
-                  <td className={recCellCls + ' text-center tabular-nums text-gray-900'}>{r.accepted}</td>
-                  <td className={recCellCls + ' text-center tabular-nums text-gray-900'}>{r.meetings}</td>
-                  <td className={recCellCls + ' text-center tabular-nums text-gray-900'}>{r.selected}</td>
-                  <td className={recCellCls + ' text-center tabular-nums text-gray-900'}>{fmtAmount(r.estimate)}</td>
+                  {REC_COLUMNS.map((col) => {
+                    const value = col.count(r);
+                    return (
+                      <td key={col.list} className={recCellCls + ' text-center tabular-nums text-gray-900'}>
+                        <RecCell
+                          value={value}
+                          display={col.list === 'estimate' ? fmtAmount(value) : String(value)}
+                          title={`${col.title} - ${r.name}`}
+                          groups={[{ events: r.events[col.list] }]}
+                          list={col.list}
+                          align={col.align}
+                          total={col.list === 'estimate' ? value : undefined}
+                        />
+                      </td>
+                    );
+                  })}
                 </tr>
               ))}
             </tbody>
             <tfoot>
               <tr className="border-t border-gray-200 bg-gray-50 font-semibold text-gray-900">
                 <td className={recCellCls + ' text-left'}>Razem</td>
-                <td className={recCellCls + ' text-center tabular-nums'}>{recTotals.submitted}</td>
-                <td className={recCellCls + ' text-center tabular-nums'}>{recTotals.accepted}</td>
-                <td className={recCellCls + ' text-center tabular-nums'}>{recTotals.meetings}</td>
-                <td className={recCellCls + ' text-center tabular-nums'}>{recTotals.selected}</td>
-                <td className={recCellCls + ' text-center tabular-nums'}>{fmtAmount(recTotals.estimate)}</td>
+                {REC_COLUMNS.map((col) => {
+                  const value = recTotals[col.list];
+                  return (
+                    <td key={col.list} className={recCellCls + ' text-center tabular-nums'}>
+                      <RecCell
+                        value={value}
+                        display={col.list === 'estimate' ? fmtAmount(value) : String(value)}
+                        title={`${col.title} - razem`}
+                        groups={freelancerRecs.map((r) => ({ name: r.name, events: r.events[col.list] }))}
+                        list={col.list}
+                        align={col.align}
+                        total={col.list === 'estimate' ? value : undefined}
+                      />
+                    </td>
+                  );
+                })}
               </tr>
             </tfoot>
           </table>
