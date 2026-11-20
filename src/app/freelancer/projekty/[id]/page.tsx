@@ -280,9 +280,21 @@ export default async function FreelancerProjektPage({
                   </span>
                   <span className="font-medium">{earnings.amount} zł</span>
                 </div>
-                <p className="text-xs text-gray-500">
-                  CV ({earnings.stage1Count}) i spotkania ({earnings.stage2Count}) w tym projekcie sa wliczone w te kwote.
-                </p>
+                {/* CV i spotkania wliczone w kwote za wybranego — pokazane informacyjnie */}
+                <div className="flex justify-between gap-4 text-gray-400">
+                  <span>
+                    CV ({earnings.stage1Count} {kand(earnings.stage1Count)} &times; {rates.cv_rate} zł)
+                    <span className="block text-xs">wliczone w kwote za wybranego</span>
+                  </span>
+                  <span className="font-medium shrink-0">0 zł</span>
+                </div>
+                <div className="flex justify-between gap-4 text-gray-400">
+                  <span>
+                    Spotkania z klientem ({earnings.stage2Count} {kand(earnings.stage2Count)} &times; {rates.meeting_rate} zł)
+                    <span className="block text-xs">wliczone w kwote za wybranego</span>
+                  </span>
+                  <span className="font-medium shrink-0">0 zł</span>
+                </div>
               </>
             ) : (
               <>

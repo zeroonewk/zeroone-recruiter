@@ -324,7 +324,15 @@ export default function FreelancerCandidatesSection({ projectId, freelancerRates
                       {' = '}
                       <strong className="text-gray-800">{earnings.amount} zł</strong>
                     </span>
-                    <span className="text-gray-400">CV i spotkania wliczone w wartosc projektu</span>
+                    {/* CV i spotkania wliczone w kwote za wybranego — pokazane informacyjnie */}
+                    <span className="text-gray-400">
+                      CV: {earnings.stage1Count} &times; {freelancerRates.cv_rate} zł = 0 zł
+                      <span className="ml-1">(wliczone w kwote za wybranego)</span>
+                    </span>
+                    <span className="text-gray-400">
+                      Spotkania z klientem: {earnings.stage2Count} &times; {freelancerRates.meeting_rate} zł = 0 zł
+                      <span className="ml-1">(wliczone w kwote za wybranego)</span>
+                    </span>
                   </>
                 ) : (
                   <>
