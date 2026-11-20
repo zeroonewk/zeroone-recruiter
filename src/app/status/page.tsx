@@ -351,6 +351,7 @@ export default async function StatusPage({
           freelancerRecs,
         }}
         availableUsers={usersRaw as UserRow[]}
+        isAdmin={session.role === 'admin'}
         selectedPeriod={period}
         selectedUserId={selectedUserId}
         customRange={

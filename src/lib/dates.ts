@@ -15,3 +15,10 @@ export function toDateString(value: unknown): string | null {
   }
   return null;
 }
+
+// "Dzis" w strefie firmy (Europe/Warsaw) — w SQL i po stronie klienta/serwera (YYYY-MM-DD).
+export const TODAY_WARSAW_SQL = `(now() AT TIME ZONE 'Europe/Warsaw')::date`;
+
+export function todayWarsaw(): string {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Warsaw' }).format(new Date());
+}
