@@ -140,7 +140,7 @@ const METRIC_INFO = {
   new_projects: 'Projekty otwarte (data otwarcia) w wybranym okresie.',
   success_points: 'Suma punktow rekruterow z projektow zamknietych z sukcesem w okresie.',
   freelancer_recs: 'Liczba kandydatow zgloszonych przez freelancerow (data zgloszenia) w wybranym okresie.',
-  freelancer_meetings: 'Kandydaci zgloszeni przez freelancera w okresie, ktorzy doszli do Etapu 2 (spotkanie z klientem) lub dalej. Liczone wg daty zgloszenia kandydata.',
+  freelancer_meetings: 'Spotkania z klientem odbyte w okresie (wg daty spotkania). Moga dotyczyc CV zgloszonych wczesniej.',
 } as const;
 
 const ANALYSIS_ITEMS: { key: keyof StatusNumbers; label: string }[] = [
@@ -382,7 +382,7 @@ export default function StatusMeetingClient({
           Rekomendacje freelancerow
           <InfoTip
             align="start"
-            text="Liczba kandydatow zgloszonych przez freelancera w okresie (data zgloszenia). Zaakceptowane = kandydaci, ktorzy przeszli Etap 1."
+            text="Zdarzenia z kandydatami freelancerow w okresie, kazde wg wlasnej daty: zgloszenie CV, przyjecie CV (Etap 1) i spotkanie z klientem (Etap 2). Freelancer widoczny, gdy ma co najmniej jedno zdarzenie w okresie."
           />
         </h2>
         {freelancerRecs.length === 0 ? (
@@ -404,7 +404,7 @@ export default function StatusMeetingClient({
                 </th>
                 <th className={recCellCls + ' text-center font-medium'}>
                   Etap 1
-                  <InfoTip text={'Zaakceptowane (Etap 1 - CV przyjete): kandydaci zgloszeni przez freelancera w okresie, ktorzy przeszli Etap 1 lub dalej. Liczone wg daty zgloszenia kandydata.'} />
+                  <InfoTip text="Zaakceptowane (Etap 1 - CV przyjete): Kandydaci, ktorych CV zostalo przyjete w okresie (wg daty przyjecia)." />
                 </th>
                 <th className={recCellCls + ' text-center font-medium'}>
                   Etap 2

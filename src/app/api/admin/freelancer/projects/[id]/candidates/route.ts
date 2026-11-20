@@ -21,7 +21,10 @@ export async function GET(_req: NextRequest, { params }: RouteContext) {
         fc.cv_url,
         fc.status,
         fc.user_id,
-        u.name AS freelancer_name
+        u.name AS freelancer_name,
+        fc.stage1_at::text AS stage1_at,
+        fc.stage2_at::text AS stage2_at,
+        fc.selected_at::text AS selected_at
       FROM freelancer_candidates fc
       JOIN users u ON u.id = fc.user_id
       WHERE fc.project_id = ${id}::uuid
@@ -33,6 +36,9 @@ export async function GET(_req: NextRequest, { params }: RouteContext) {
       status: string;
       user_id: string;
       freelancer_name: string;
+      stage1_at: string | null;
+      stage2_at: string | null;
+      selected_at: string | null;
     }[];
 
     return NextResponse.json({ ok: true, items: rows });

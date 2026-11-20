@@ -10,7 +10,7 @@ export type PeriodNumbers = {
   success_points: number;  // Punkty zdobyte
   new_projects: number;    // Nowe projekty
   freelancer_recs: number; // Rekomendacje freelancerow
-  freelancer_meetings: number; // Spotkania z klientem (Etap 2+) kandydatow freelancerow
+  freelancer_meetings: number; // Spotkania z klientem (Etap 2) wg stage2_at
 };
 
 export const EMPTY_PERIOD_NUMBERS: PeriodNumbers = {
@@ -22,17 +22,19 @@ export const EMPTY_PERIOD_NUMBERS: PeriodNumbers = {
   freelancer_meetings: 0,
 };
 
-// Kandydaci zgloszeni przez freelancera (is_external), data zgloszenia w okresie.
-const FREELANCER_CANDIDATES_FROM = `
+// Kandydaci freelancerow (is_external) w projektach rekrutera. Filtr dat dokladany osobno:
+// kazde zdarzenie (zgloszenie, Etap 1, Etap 2) liczone wg wlasnej daty.
+const FREELANCER_CANDIDATES_BASE = `
   FROM freelancer_candidates fc
   JOIN users u ON u.id = fc.user_id
   JOIN projects p ON p.id = fc.project_id
   WHERE u.is_external = TRUE
-    AND fc.created_at::date BETWEEN $2::date AND $3::date
     AND ($1::uuid IS NULL OR p.owner_id = $1::uuid)`;
 
-export const ACCEPTED_CANDIDATE_STATUSES = ['stage1', 'stage2', 'selected'] as const;
-export const MEETING_CANDIDATE_STATUSES = ['stage2', 'selected'] as const;
+const IN_RANGE = (expr: string) => `${expr} BETWEEN $2::date AND $3::date`;
+const SUBMITTED_IN_RANGE = IN_RANGE('fc.created_at::date');
+const STAGE1_IN_RANGE = IN_RANGE('fc.stage1_at');
+const STAGE2_IN_RANGE = IN_RANGE('fc.stage2_at');
 
 export async function fetchPeriodNumbers(ownerId: string | null, range: DateRange): Promise<PeriodNumbers> {
   const rows = (await sql.query(
@@ -55,10 +57,11 @@ export async function fetchPeriodNumbers(ownerId: string | null, range: DateRang
         WHERE p.opened_at BETWEEN $2::date AND $3::date
           AND p.is_archived = FALSE
           AND ($1::uuid IS NULL OR p.owner_id = $1::uuid)) AS new_projects,
-       (SELECT COUNT(*)::int ${FREELANCER_CANDIDATES_FROM}) AS freelancer_recs,
-       (SELECT COUNT(*)::int ${FREELANCER_CANDIDATES_FROM}
-          AND fc.status = ANY($4::text[])) AS freelancer_meetings`,
-    [ownerId, range.start, range.end, [...MEETING_CANDIDATE_STATUSES]]
+       (SELECT COUNT(*)::int ${FREELANCER_CANDIDATES_BASE}
+          AND ${SUBMITTED_IN_RANGE}) AS freelancer_recs,
+       (SELECT COUNT(*)::int ${FREELANCER_CANDIDATES_BASE}
+          AND ${STAGE2_IN_RANGE}) AS freelancer_meetings`,
+    [ownerId, range.start, range.end]
   )) as PeriodNumbers[];
   return rows[0] ?? EMPTY_PERIOD_NUMBERS;
 }
@@ -66,9 +69,9 @@ export async function fetchPeriodNumbers(ownerId: string | null, range: DateRang
 export type FreelancerRecommendation = {
   user_id: string;
   name: string;
-  submitted: number;
-  accepted: number;
-  meetings: number;
+  submitted: number; // zgloszone w okresie (created_at)
+  accepted: number;  // Etap 1 osiagniety w okresie (stage1_at)
+  meetings: number;  // Etap 2 osiagniety w okresie (stage2_at)
 };
 
 export async function fetchFreelancerRecommendations(
@@ -79,12 +82,13 @@ export async function fetchFreelancerRecommendations(
     `SELECT
        u.id AS user_id,
        u.name,
-       COUNT(*)::int AS submitted,
-       COUNT(*) FILTER (WHERE fc.status = ANY($4::text[]))::int AS accepted,
-       COUNT(*) FILTER (WHERE fc.status = ANY($5::text[]))::int AS meetings
-     ${FREELANCER_CANDIDATES_FROM}
+       COUNT(*) FILTER (WHERE ${SUBMITTED_IN_RANGE})::int AS submitted,
+       COUNT(*) FILTER (WHERE ${STAGE1_IN_RANGE})::int AS accepted,
+       COUNT(*) FILTER (WHERE ${STAGE2_IN_RANGE})::int AS meetings
+     ${FREELANCER_CANDIDATES_BASE}
+       AND (${SUBMITTED_IN_RANGE} OR ${STAGE1_IN_RANGE} OR ${STAGE2_IN_RANGE})
      GROUP BY u.id, u.name
-     ORDER BY submitted DESC, u.name ASC`,
-    [ownerId, range.start, range.end, [...ACCEPTED_CANDIDATE_STATUSES], [...MEETING_CANDIDATE_STATUSES]]
+     ORDER BY submitted DESC, accepted DESC, meetings DESC, u.name ASC`,
+    [ownerId, range.start, range.end]
   )) as FreelancerRecommendation[];
 }

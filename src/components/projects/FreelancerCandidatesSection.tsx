@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import type { FreelancerRates } from '@/app/api/projekty/[id]/route';
 
 type CandidateStatus = 'submitted' | 'stage1' | 'stage2' | 'selected';
@@ -12,7 +13,43 @@ type Candidate = {
   status: CandidateStatus;
   user_id: string;
   freelancer_name: string;
+  stage1_at: string | null;
+  stage2_at: string | null;
+  selected_at: string | null;
 };
+
+type StageStatus = Exclude<CandidateStatus, 'submitted'>;
+
+const STAGE_DATE_KEY: Record<StageStatus, 'stage1_at' | 'stage2_at' | 'selected_at'> = {
+  stage1: 'stage1_at',
+  stage2: 'stage2_at',
+  selected: 'selected_at',
+};
+
+const STAGE_LABEL: Record<StageStatus, string> = {
+  stage1: 'Etap 1',
+  stage2: 'Etap 2',
+  selected: 'Wybrany',
+};
+
+// Dialog daty: przejscie w przod ('advance') albo korekta daty aktualnego etapu ('date')
+type DateDialog = {
+  candidateId: string;
+  candidateName: string;
+  mode: 'advance' | 'date';
+  stage: StageStatus;
+  date: string;
+  anchor: { top: number; bottom: number; left: number; right: number };
+};
+
+// Dzis w strefie firmy (YYYY-MM-DD) — zgodne z walidacja w API
+function todayWarsaw(): string {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Warsaw' }).format(new Date());
+}
+
+function fmtDayMonth(s: string): string {
+  return `${s.slice(8, 10)}.${s.slice(5, 7)}`;
+}
 
 type FreelancerGroup = {
   user_id: string;
@@ -82,25 +119,125 @@ export default function FreelancerCandidatesSection({ projectId, freelancerRates
     void fetchCandidates();
   }, [fetchCandidates]);
 
-  async function handleAdvance(candidateId: string, newStatus: CandidateStatus) {
+  const [dialog, setDialog] = useState<DateDialog | null>(null);
+  const [dialogError, setDialogError] = useState('');
+  const [actionError, setActionError] = useState('');
+
+  async function sendPatch(candidateId: string, body: { status?: CandidateStatus; date?: string }): Promise<string | null> {
     setUpdatingId(candidateId);
     try {
       const res = await fetch(`/api/admin/freelancer/candidates/${candidateId}/status`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: newStatus }),
+        body: JSON.stringify(body),
       });
-      const data = (await res.json()) as { ok: boolean; error?: string };
-      if (data.ok) {
+      const data = (await res.json()) as {
+        ok: boolean;
+        error?: string;
+        item?: Pick<Candidate, 'status' | 'stage1_at' | 'stage2_at' | 'selected_at'>;
+      };
+      if (data.ok && data.item) {
+        const item = data.item;
         setCandidates((prev) =>
-          prev.map((c) => (c.id === candidateId ? { ...c, status: newStatus } : c))
+          prev.map((c) =>
+            c.id === candidateId
+              ? { ...c, status: item.status, stage1_at: item.stage1_at, stage2_at: item.stage2_at, selected_at: item.selected_at }
+              : c
+          )
         );
+        return null;
       }
+      return data.error ?? 'Nie udalo sie zapisac';
     } catch {
-      // silently ignore — candidate state stays unchanged
+      return 'Blad sieci';
     } finally {
       setUpdatingId(null);
     }
+  }
+
+  function openDialog(
+    e: React.SyntheticEvent<HTMLElement>,
+    c: Candidate,
+    mode: DateDialog['mode'],
+    stage: StageStatus
+  ) {
+    const r = e.currentTarget.getBoundingClientRect();
+    setDialogError('');
+    setActionError('');
+    setDialog({
+      candidateId: c.id,
+      candidateName: c.full_name,
+      mode,
+      stage,
+      date: mode === 'date' ? (c[STAGE_DATE_KEY[stage]] ?? todayWarsaw()) : todayWarsaw(),
+      anchor: { top: r.top, bottom: r.bottom, left: r.left, right: r.right },
+    });
+  }
+
+  // Klik w checkbox etapu: w przod -> dialog daty; w tyl -> od razu (backend czysci date)
+  function handleToggle(e: React.ChangeEvent<HTMLInputElement>, c: Candidate, forward: StageStatus, back: CandidateStatus) {
+    const isForward = c.status === back;
+    if (isForward) {
+      openDialog(e, c, 'advance', forward);
+      return;
+    }
+    setActionError('');
+    void sendPatch(c.id, { status: back }).then((err) => {
+      if (err) setActionError(`${c.full_name}: ${err}`);
+    });
+  }
+
+  async function saveDialog() {
+    if (!dialog) return;
+    const today = todayWarsaw();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dialog.date)) {
+      setDialogError('Podaj date');
+      return;
+    }
+    if (dialog.date > today) {
+      setDialogError('Data nie moze byc z przyszlosci');
+      return;
+    }
+    const err = await sendPatch(
+      dialog.candidateId,
+      dialog.mode === 'advance' ? { status: dialog.stage, date: dialog.date } : { date: dialog.date }
+    );
+    if (err) setDialogError(err);
+    else setDialog(null);
+  }
+
+  // Komorka etapu: checkbox + mala data (klikalna dla aktualnego etapu)
+  function renderStageCell(c: Candidate, stage: StageStatus, back: CandidateStatus, checked: boolean, disabled: boolean) {
+    const date = c[STAGE_DATE_KEY[stage]];
+    const canFixDate = canEdit && checked && c.status === stage && updatingId !== c.id;
+    return (
+      <td className="px-4 py-2.5 text-center">
+        <div className="inline-flex flex-col items-center gap-0.5">
+          <input
+            type="checkbox"
+            checked={checked}
+            disabled={disabled}
+            onChange={(e) => handleToggle(e, c, stage, back)}
+            aria-label={`${STAGE_LABEL[stage]} - ${c.full_name}`}
+            className="w-4 h-4 accent-[#FF5A3C] cursor-pointer disabled:cursor-default"
+          />
+          {checked && date && (
+            canFixDate ? (
+              <button
+                type="button"
+                onClick={(e) => openDialog(e, c, 'date', stage)}
+                title="Popraw date"
+                className="text-[11px] leading-none text-gray-400 hover:text-gray-700 hover:underline tabular-nums"
+              >
+                {fmtDayMonth(date)}
+              </button>
+            ) : (
+              <span className="text-[11px] leading-none text-gray-400 tabular-nums">{fmtDayMonth(date)}</span>
+            )
+          )}
+        </div>
+      </td>
+    );
   }
 
   if (loading) {
@@ -135,6 +272,8 @@ export default function FreelancerCandidatesSection({ projectId, freelancerRates
   return (
     <div className="bg-white border border-gray-200 rounded-lg p-6">
       <h2 className="text-base font-semibold text-gray-900 mb-6">Kandydaci freelancerow ({candidates.length})</h2>
+
+      {actionError && <p className="-mt-4 mb-4 text-sm text-red-600">{actionError}</p>}
 
       <div className="space-y-8">
         {groups.map((group) => {
@@ -178,33 +317,9 @@ export default function FreelancerCandidatesSection({ projectId, freelancerRates
                               Zobacz CV
                             </a>
                           </td>
-                          <td className="px-4 py-2.5 text-center">
-                            <input
-                              type="checkbox"
-                              checked={stage1Checked}
-                              disabled={stage1Disabled}
-                              onChange={() => void handleAdvance(c.id, c.status === 'submitted' ? 'stage1' : 'submitted')}
-                              className="w-4 h-4 accent-[#FF5A3C] cursor-pointer disabled:cursor-default"
-                            />
-                          </td>
-                          <td className="px-4 py-2.5 text-center">
-                            <input
-                              type="checkbox"
-                              checked={stage2Checked}
-                              disabled={stage2Disabled}
-                              onChange={() => void handleAdvance(c.id, c.status === 'stage1' ? 'stage2' : 'stage1')}
-                              className="w-4 h-4 accent-[#FF5A3C] cursor-pointer disabled:cursor-default"
-                            />
-                          </td>
-                          <td className="px-4 py-2.5 text-center">
-                            <input
-                              type="checkbox"
-                              checked={selectedChecked}
-                              disabled={selectedDisabled}
-                              onChange={() => void handleAdvance(c.id, c.status === 'stage2' ? 'selected' : 'stage2')}
-                              className="w-4 h-4 accent-[#FF5A3C] cursor-pointer disabled:cursor-default"
-                            />
-                          </td>
+                          {renderStageCell(c, 'stage1', 'submitted', stage1Checked, stage1Disabled)}
+                          {renderStageCell(c, 'stage2', 'stage1', stage2Checked, stage2Disabled)}
+                          {renderStageCell(c, 'selected', 'stage2', selectedChecked, selectedDisabled)}
                         </tr>
                       );
                     })}
@@ -239,6 +354,115 @@ export default function FreelancerCandidatesSection({ projectId, freelancerRates
           );
         })}
       </div>
+
+      {dialog && (
+        <StageDateDialog
+          dialog={dialog}
+          error={dialogError}
+          saving={updatingId === dialog.candidateId}
+          onChange={(date) => setDialog((d) => (d ? { ...d, date } : d))}
+          onSave={() => void saveDialog()}
+          onCancel={() => setDialog(null)}
+        />
+      )}
     </div>
+  );
+}
+
+// ── Okienko z data etapu ─────────────────────────────────────────────────────
+
+const DIALOG_WIDTH = 240;
+
+function StageDateDialog({
+  dialog,
+  error,
+  saving,
+  onChange,
+  onSave,
+  onCancel,
+}: {
+  dialog: DateDialog;
+  error: string;
+  saving: boolean;
+  onChange: (date: string) => void;
+  onSave: () => void;
+  onCancel: () => void;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const today = todayWarsaw();
+
+  useEffect(() => {
+    const onDown = (e: PointerEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) onCancel();
+    };
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onCancel(); };
+    document.addEventListener('pointerdown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('pointerdown', onDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [onCancel]);
+
+  // Pod kliknietym elementem, wysrodkowane i przyciete do ekranu
+  const vw = typeof window !== 'undefined' ? window.innerWidth : 1024;
+  const vh = typeof window !== 'undefined' ? window.innerHeight : 768;
+  const width = Math.min(DIALOG_WIDTH, vw - 16);
+  const center = (dialog.anchor.left + dialog.anchor.right) / 2;
+  const left = Math.max(8, Math.min(center - width / 2, vw - width - 8));
+  const openUp = dialog.anchor.bottom + 170 > vh;
+  const style: React.CSSProperties = openUp
+    ? { position: 'fixed', left, width, bottom: vh - dialog.anchor.top + 6 }
+    : { position: 'fixed', left, width, top: dialog.anchor.bottom + 6 };
+
+  const title =
+    dialog.mode === 'advance'
+      ? `${STAGE_LABEL[dialog.stage]} - data`
+      : `Popraw date: ${STAGE_LABEL[dialog.stage]}`;
+
+  return createPortal(
+    <div
+      ref={ref}
+      role="dialog"
+      aria-label={title}
+      style={style}
+      className="z-[1000] bg-white border border-gray-200 rounded-lg shadow-lg p-3 text-left"
+    >
+      <p className="text-sm font-medium text-gray-900">{title}</p>
+      <p className="text-xs text-gray-500 truncate mb-2" title={dialog.candidateName}>{dialog.candidateName}</p>
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          onSave();
+        }}
+      >
+        <input
+          type="date"
+          value={dialog.date}
+          max={today}
+          onChange={(e) => onChange(e.target.value)}
+          autoFocus
+          className="w-full px-2 py-1 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-[#FF5A3C]"
+        />
+        {error && <p className="mt-1.5 text-xs text-red-600">{error}</p>}
+        <div className="mt-3 flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={onCancel}
+            className="px-3 py-1.5 text-sm font-medium text-gray-600 rounded-md hover:bg-gray-100 transition-colors"
+          >
+            Anuluj
+          </button>
+          <button
+            type="submit"
+            disabled={saving || !dialog.date}
+            className="px-3 py-1.5 bg-[#FF5A3C] hover:bg-[#E64428] text-white text-sm font-medium rounded-md disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            {saving ? 'Zapisywanie...' : 'Zapisz'}
+          </button>
+        </div>
+      </form>
+    </div>,
+    document.body
   );
 }
