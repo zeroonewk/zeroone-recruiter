@@ -141,6 +141,8 @@ const METRIC_INFO = {
   success_points: 'Suma punktow rekruterow z projektow zamknietych z sukcesem w okresie.',
   freelancer_recs: 'Liczba kandydatow zgloszonych przez freelancerow (data zgloszenia) w wybranym okresie.',
   freelancer_meetings: 'Spotkania z klientem odbyte w okresie (wg daty spotkania). Moga dotyczyc CV zgloszonych wczesniej.',
+  freelancer_selected: 'Kandydaci freelancerow wybrani (zatrudnieni) w okresie, wg daty wyboru.',
+  freelancer_estimate: 'Szacunkowe wynagrodzenie za zdarzenia z okresu: wartosc projektu za wybranego; stawki za CV i spotkania tylko tam, gdzie freelancer nie ma wybranego kandydata w tym projekcie. To estymacja, nie wyplata.',
 } as const;
 
 const ANALYSIS_ITEMS: { key: keyof StatusNumbers; label: string }[] = [
@@ -150,6 +152,8 @@ const ANALYSIS_ITEMS: { key: keyof StatusNumbers; label: string }[] = [
   { key: 'success_points', label: 'Punkty zdobyte' },
   { key: 'freelancer_recs', label: 'Rekomendacje freelancerow' },
   { key: 'freelancer_meetings', label: 'Spotkania z klientem (freelancerzy)' },
+  { key: 'freelancer_selected', label: 'Wybrani (zatrudnienia)' },
+  { key: 'freelancer_estimate', label: 'Szacunek wynagrodzen (zl)' },
 ];
 
 // Baza < 5: roznica bezwzgledna ("2 -> 4"); baza >= 5: procent ze strzalka; oba 0: "-".
@@ -174,6 +178,11 @@ function PeriodChange({ current, previous }: { current: number; previous: number
   );
 }
 
+// Kwoty w zl zaokraglone do pelnych zlotych (szacunek)
+function fmtAmount(v: number): string {
+  return String(Math.round(v));
+}
+
 function AnalysisBar({ value, max, color, label }: { value: number; max: number; color: string; label: string }) {
   const pct = max > 0 ? (value / max) * 100 : 0;
   return (
@@ -184,7 +193,7 @@ function AnalysisBar({ value, max, color, label }: { value: number; max: number;
           style={{ width: `${pct}%`, minWidth: value > 0 ? '2px' : 0, backgroundColor: color }}
         />
       </div>
-      <span className="w-10 text-right text-xs font-medium text-gray-700 tabular-nums">{value}</span>
+      <span className="w-14 text-right text-xs font-medium text-gray-700 tabular-nums">{fmtAmount(value)}</span>
     </div>
   );
 }
@@ -213,8 +222,10 @@ export default function StatusMeetingClient({
       submitted: acc.submitted + r.submitted,
       accepted: acc.accepted + r.accepted,
       meetings: acc.meetings + r.meetings,
+      selected: acc.selected + r.selected,
+      estimate: acc.estimate + r.estimate,
     }),
-    { submitted: 0, accepted: 0, meetings: 0 }
+    { submitted: 0, accepted: 0, meetings: 0, selected: 0, estimate: 0 }
   );
   const alertCounts = countAlerts(alerts);
 
@@ -382,7 +393,7 @@ export default function StatusMeetingClient({
           Rekomendacje freelancerow
           <InfoTip
             align="start"
-            text="Zdarzenia z kandydatami freelancerow w okresie, kazde wg wlasnej daty: zgloszenie CV, przyjecie CV (Etap 1) i spotkanie z klientem (Etap 2). Freelancer widoczny, gdy ma co najmniej jedno zdarzenie w okresie."
+            text="Zdarzenia z kandydatami freelancerow w okresie, kazde wg wlasnej daty: zgloszenie CV, przyjecie CV (Etap 1), spotkanie z klientem (Etap 2) i wybor kandydata. Freelancer widoczny, gdy ma co najmniej jedno zdarzenie w okresie."
           />
         </h2>
         {freelancerRecs.length === 0 ? (
@@ -390,10 +401,12 @@ export default function StatusMeetingClient({
         ) : (
           <table className="w-full table-fixed text-sm">
             <colgroup>
-              <col className="w-[40%]" />
-              <col className="w-[20%]" />
-              <col className="w-[20%]" />
-              <col className="w-[20%]" />
+              <col className="w-[30%]" />
+              <col className="w-[13%]" />
+              <col className="w-[13%]" />
+              <col className="w-[13%]" />
+              <col className="w-[13%]" />
+              <col className="w-[18%]" />
             </colgroup>
             <thead>
               <tr className="text-xs text-gray-500 uppercase tracking-wide">
@@ -408,7 +421,15 @@ export default function StatusMeetingClient({
                 </th>
                 <th className={recCellCls + ' text-center font-medium'}>
                   Etap 2
-                  <InfoTip align="end" text={'Spotkania z klientem (Etap 2): ' + METRIC_INFO.freelancer_meetings} />
+                  <InfoTip text={'Spotkania z klientem (Etap 2): ' + METRIC_INFO.freelancer_meetings} />
+                </th>
+                <th className={recCellCls + ' text-center font-medium'}>
+                  Wybrany
+                  <InfoTip align="end" text={METRIC_INFO.freelancer_selected} />
+                </th>
+                <th className={recCellCls + ' text-center font-medium'}>
+                  Szacunek (zl)
+                  <InfoTip align="end" text={METRIC_INFO.freelancer_estimate} />
                 </th>
               </tr>
             </thead>
@@ -419,6 +440,8 @@ export default function StatusMeetingClient({
                   <td className={recCellCls + ' text-center tabular-nums text-gray-900'}>{r.submitted}</td>
                   <td className={recCellCls + ' text-center tabular-nums text-gray-900'}>{r.accepted}</td>
                   <td className={recCellCls + ' text-center tabular-nums text-gray-900'}>{r.meetings}</td>
+                  <td className={recCellCls + ' text-center tabular-nums text-gray-900'}>{r.selected}</td>
+                  <td className={recCellCls + ' text-center tabular-nums text-gray-900'}>{fmtAmount(r.estimate)}</td>
                 </tr>
               ))}
             </tbody>
@@ -428,6 +451,8 @@ export default function StatusMeetingClient({
                 <td className={recCellCls + ' text-center tabular-nums'}>{recTotals.submitted}</td>
                 <td className={recCellCls + ' text-center tabular-nums'}>{recTotals.accepted}</td>
                 <td className={recCellCls + ' text-center tabular-nums'}>{recTotals.meetings}</td>
+                <td className={recCellCls + ' text-center tabular-nums'}>{recTotals.selected}</td>
+                <td className={recCellCls + ' text-center tabular-nums'}>{fmtAmount(recTotals.estimate)}</td>
               </tr>
             </tfoot>
           </table>

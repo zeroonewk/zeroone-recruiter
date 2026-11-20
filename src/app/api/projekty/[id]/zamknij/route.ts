@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { sql } from '@/lib/db';
 import { requireSession } from '@/lib/auth';
+import { calcFreelancerEarnings, normalizeRates } from '@/lib/freelancer-earnings';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -191,29 +192,16 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
 
     const assignedFreelancerIds = (freelancerRows as { user_id: string }[]).map((r) => r.user_id);
     if (assignedFreelancerIds.length > 0) {
-      const rawRates = project.freelancer_rates;
-      const rates = (() => {
-        if (rawRates && typeof rawRates === 'object' && !Array.isArray(rawRates)) {
-          const r = rawRates as Record<string, unknown>;
-          return {
-            cv_rate: typeof r.cv_rate === 'number' ? r.cv_rate : 1,
-            meeting_rate: typeof r.meeting_rate === 'number' ? r.meeting_rate : 5,
-            project_value: typeof r.project_value === 'number' ? r.project_value : null,
-          };
-        }
-        return { cv_rate: 1, meeting_rate: 5, project_value: null };
-      })();
-      const effectiveValue = rates.project_value ?? project.points;
+      const rates = normalizeRates(project.freelancer_rates);
       const candidates = candidateRows as { user_id: string; status: string }[];
 
       const payouts = assignedFreelancerIds.map((uid) => {
-        const mine = candidates.filter((c) => c.user_id === uid);
-        const stage1 = mine.filter((c) => c.status === 'stage1').length;
-        const stage2 = mine.filter((c) => c.status === 'stage2').length;
-        const hasSelected = mine.some((c) => c.status === 'selected');
-        const paid = stage1 * rates.cv_rate + stage2 * rates.meeting_rate;
-        const bonus = hasSelected ? Math.max(0, effectiveValue - paid) : 0;
-        return { user_id: uid, amount: paid + bonus };
+        const { amount } = calcFreelancerEarnings({
+          rates,
+          points: project.points,
+          candidates: candidates.filter((c) => c.user_id === uid),
+        });
+        return { user_id: uid, amount };
       });
 
       await sql.query(

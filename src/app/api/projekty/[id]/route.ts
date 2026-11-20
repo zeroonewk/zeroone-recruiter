@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { sql } from '@/lib/db';
+import { normalizeRates, type FreelancerRates } from '@/lib/freelancer-earnings';
 import { requireSession } from '@/lib/auth';
 import { normalizeFunnel, FUNNEL_LEVELS, type FunnelData } from '@/lib/funnel';
 
@@ -8,11 +9,8 @@ const URL_RE = /^https?:\/\//;
 
 type LinkInput = { label: string; url: string };
 
-export type FreelancerRates = {
-  cv_rate: number;
-  meeting_rate: number;
-  project_value: number | null;
-};
+// Typ stawek wspolny z logika wynagrodzen (re-eksport dla dotychczasowych importow).
+export type { FreelancerRates } from '@/lib/freelancer-earnings';
 
 export type ProjectFull = {
   id: string;
@@ -41,17 +39,8 @@ export type ProjectFull = {
   status_is_success: boolean;
 };
 
-function normalizeFreelancerRates(raw: unknown): FreelancerRates {
-  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
-    return { cv_rate: 1, meeting_rate: 5, project_value: null };
-  }
-  const r = raw as Record<string, unknown>;
-  return {
-    cv_rate: typeof r.cv_rate === 'number' ? r.cv_rate : 1,
-    meeting_rate: typeof r.meeting_rate === 'number' ? r.meeting_rate : 5,
-    project_value: typeof r.project_value === 'number' ? r.project_value : null,
-  };
-}
+// Wspolna normalizacja stawek (brak cv_rate / meeting_rate => 0, zero zostaje zerem).
+const normalizeFreelancerRates = (raw: unknown): FreelancerRates => normalizeRates(raw);
 
 export type ProjectStage = {
   id: string;

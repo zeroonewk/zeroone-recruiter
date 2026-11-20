@@ -1,11 +1,12 @@
 import { notFound, redirect } from 'next/navigation';
 import { getSession } from '@/lib/auth';
 import { sql } from '@/lib/db';
+import { normalizeRates } from '@/lib/freelancer-earnings';
 import { toDateString } from '@/lib/dates';
 import { normalizeFunnel } from '@/lib/funnel';
 import AppShell from '@/components/layout/AppShell';
 import ProjektEdycjaClient from '@/components/projects/ProjektEdycjaClient';
-import type { ProjectFull, ProjectStage, FreelancerRates } from '@/app/api/projekty/[id]/route';
+import type { ProjectFull, ProjectStage } from '@/app/api/projekty/[id]/route';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -108,16 +109,6 @@ export default async function ProjektDetailPage({
 
   const raw = projectRows[0] as ProjectRowRaw;
 
-  function normalizeFreelancerRates(r: unknown): FreelancerRates {
-    if (!r || typeof r !== 'object' || Array.isArray(r)) return { cv_rate: 1, meeting_rate: 5, project_value: null };
-    const obj = r as Record<string, unknown>;
-    return {
-      cv_rate: typeof obj.cv_rate === 'number' ? obj.cv_rate : 1,
-      meeting_rate: typeof obj.meeting_rate === 'number' ? obj.meeting_rate : 5,
-      project_value: typeof obj.project_value === 'number' ? obj.project_value : null,
-    };
-  }
-
   const project: ProjectFull = {
     id: raw.id,
     title: raw.title,
@@ -131,7 +122,7 @@ export default async function ProjektDetailPage({
     is_archived: raw.is_archived,
     disable_stages: raw.disable_stages,
     funnel: normalizeFunnel(raw.funnel),
-    freelancer_rates: normalizeFreelancerRates(raw.freelancer_rates),
+    freelancer_rates: normalizeRates(raw.freelancer_rates),
     client_id: raw.client_id,
     client_name: raw.client_name,
     type_id: raw.type_id,

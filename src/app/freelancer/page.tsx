@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { getSession } from '@/lib/auth';
 import { sql } from '@/lib/db';
 import FreelancerShell from '@/components/freelancer/FreelancerShell';
+import { effectiveProjectValue, normalizeRates } from '@/lib/freelancer-earnings';
 
 export const dynamic = 'force-dynamic';
 
@@ -18,11 +19,7 @@ type ProjectRow = {
 };
 
 function effectiveValue(raw: unknown, points: number): number {
-  if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
-    const r = raw as Record<string, unknown>;
-    if (typeof r.project_value === 'number') return r.project_value;
-  }
-  return points;
+  return effectiveProjectValue(normalizeRates(raw), points);
 }
 
 function formatDate(raw: string): string {

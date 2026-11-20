@@ -4,12 +4,11 @@ import { getSession } from '@/lib/auth';
 import { sql } from '@/lib/db';
 import FreelancerShell from '@/components/freelancer/FreelancerShell';
 import AddCandidateForm from '@/components/freelancer/AddCandidateForm';
+import { calcFreelancerEarnings, normalizeRates } from '@/lib/freelancer-earnings';
 
 export const dynamic = 'force-dynamic';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-type FreelancerRates = { cv_rate: number; meeting_rate: number; project_value: number | null };
 
 const ACTIVE_STATUS_ID = 'dd43a0a8-cd05-4b27-ac43-d9fcbd563cbf';
 
@@ -30,33 +29,6 @@ type CandidateRow = {
   cv_url: string;
   status: 'submitted' | 'stage1' | 'stage2' | 'selected';
 };
-
-function normalizeRates(raw: unknown, fallbackPoints: number): FreelancerRates {
-  if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
-    const r = raw as Record<string, unknown>;
-    return {
-      cv_rate: typeof r.cv_rate === 'number' ? r.cv_rate : 1,
-      meeting_rate: typeof r.meeting_rate === 'number' ? r.meeting_rate : 5,
-      project_value: typeof r.project_value === 'number' ? r.project_value : null,
-    };
-  }
-  return { cv_rate: 1, meeting_rate: 5, project_value: null };
-}
-
-function calcEarnings(candidates: CandidateRow[], rates: FreelancerRates, projectPoints: number) {
-  const stage1Count = candidates.filter((c) => c.status === 'stage1').length;
-  const stage2Count = candidates.filter((c) => c.status === 'stage2').length;
-  const hasSelected = candidates.some((c) => c.status === 'selected');
-
-  const effectiveValue = rates.project_value ?? projectPoints;
-  const stage1Earnings = stage1Count * rates.cv_rate;
-  const stage2Earnings = stage2Count * rates.meeting_rate;
-  const paid = stage1Earnings + stage2Earnings;
-  const selectedEarnings = hasSelected ? Math.max(0, effectiveValue - paid) : 0;
-  const total = paid + selectedEarnings;
-
-  return { stage1Count, stage2Count, stage1Earnings, stage2Earnings, selectedEarnings, hasSelected, total, effectiveValue };
-}
 
 export default async function FreelancerProjektPage({
   params,
@@ -115,8 +87,9 @@ export default async function FreelancerProjektPage({
   const candidates = candidateRows as CandidateRow[];
   const payout = (payoutRows as { amount: string | number }[])[0] ?? null;
   const isActive = project.closed_at === null && project.status_id === ACTIVE_STATUS_ID;
-  const rates = normalizeRates(project.freelancer_rates, project.points);
-  const earnings = calcEarnings(candidates, rates, project.points);
+  const rates = normalizeRates(project.freelancer_rates);
+  const earnings = calcFreelancerEarnings({ rates, points: project.points, candidates });
+  const kand = (n: number) => (n === 1 ? 'kandydat' : 'kandydatow');
 
   if (project.closed_at !== null && payout) {
     return (
@@ -289,35 +262,47 @@ export default async function FreelancerProjektPage({
               <p className="text-xl font-bold text-gray-900">{earnings.effectiveValue} <span className="text-sm font-normal text-gray-500">zł</span></p>
             </div>
           </div>
+          <p className="mt-3 text-xs text-gray-500">
+            Stawki za CV i spotkania naliczane sa za kazdego kandydata, ktory przeszedl dany etap (kandydat na Etapie 2 ma obie stawki).
+            Gdy Twoj kandydat zostanie wybrany, wynagrodzenie w tym projekcie to wartosc projektu za kazdego wybranego - CV i spotkania sa w nia wliczone.
+          </p>
         </div>
 
         {/* Earnings */}
         <div className="bg-white border border-gray-200 rounded-xl px-5 py-5">
           <h2 className="font-semibold text-gray-900 mb-4">Moje wynagrodzenie</h2>
           <div className="space-y-2 text-sm">
-            <div className="flex justify-between text-gray-700">
-              <span>
-                Etap 1 ({earnings.stage1Count} {earnings.stage1Count === 1 ? 'kandydat' : 'kandydatow'} &times; {rates.cv_rate} zł)
-              </span>
-              <span className="font-medium">{earnings.stage1Earnings} zł</span>
-            </div>
-            <div className="flex justify-between text-gray-700">
-              <span>
-                Etap 2 ({earnings.stage2Count} {earnings.stage2Count === 1 ? 'kandydat' : 'kandydatow'} &times; {rates.meeting_rate} zł)
-              </span>
-              <span className="font-medium">{earnings.stage2Earnings} zł</span>
-            </div>
-            {earnings.hasSelected && (
-              <div className="flex justify-between text-gray-700">
-                <span>
-                  Wybrany ({earnings.effectiveValue} zł &minus; {earnings.stage1Earnings + earnings.stage2Earnings} zł wyplaconych)
-                </span>
-                <span className="font-medium">{earnings.selectedEarnings} zł</span>
-              </div>
+            {earnings.mode === 'selected' ? (
+              <>
+                <div className="flex justify-between text-gray-700">
+                  <span>
+                    Wybrany ({earnings.selectedCount} &times; wartosc projektu {earnings.effectiveValue} zł)
+                  </span>
+                  <span className="font-medium">{earnings.amount} zł</span>
+                </div>
+                <p className="text-xs text-gray-500">
+                  CV ({earnings.stage1Count}) i spotkania ({earnings.stage2Count}) w tym projekcie sa wliczone w te kwote.
+                </p>
+              </>
+            ) : (
+              <>
+                <div className="flex justify-between text-gray-700">
+                  <span>
+                    CV ({earnings.stage1Count} {kand(earnings.stage1Count)} &times; {rates.cv_rate} zł)
+                  </span>
+                  <span className="font-medium">{earnings.stage1Count * rates.cv_rate} zł</span>
+                </div>
+                <div className="flex justify-between text-gray-700">
+                  <span>
+                    Spotkania ({earnings.stage2Count} {kand(earnings.stage2Count)} &times; {rates.meeting_rate} zł)
+                  </span>
+                  <span className="font-medium">{earnings.stage2Count * rates.meeting_rate} zł</span>
+                </div>
+              </>
             )}
             <div className="border-t border-gray-200 pt-2 mt-2 flex justify-between font-semibold text-gray-900">
               <span>Suma</span>
-              <span className="text-[#FF5A3C]">{earnings.total} zł</span>
+              <span className="text-[#FF5A3C]">{earnings.amount} zł</span>
             </div>
           </div>
         </div>

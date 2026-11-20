@@ -2,9 +2,8 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import type { FreelancerRates } from '@/app/api/projekty/[id]/route';
+import { calcFreelancerEarnings, type CandidateStatus, type FreelancerRates } from '@/lib/freelancer-earnings';
 
-type CandidateStatus = 'submitted' | 'stage1' | 'stage2' | 'selected';
 
 type Candidate = {
   id: string;
@@ -63,22 +62,6 @@ type Props = {
   projectPoints: number;
   canEdit: boolean;
 };
-
-function calcEarnings(
-  candidates: Candidate[],
-  rates: FreelancerRates,
-  projectPoints: number
-) {
-  const stage1Count = candidates.filter((c) => c.status === 'stage1').length;
-  const stage2Count = candidates.filter((c) => c.status === 'stage2').length;
-  const hasSelected = candidates.some((c) => c.status === 'selected');
-  const effectiveValue = rates.project_value ?? projectPoints;
-  const stage1Earnings = stage1Count * rates.cv_rate;
-  const stage2Earnings = stage2Count * rates.meeting_rate;
-  const paid = stage1Earnings + stage2Earnings;
-  const selectedEarnings = hasSelected ? Math.max(0, effectiveValue - paid) : 0;
-  return { stage1Count, stage2Count, stage1Earnings, stage2Earnings, selectedEarnings, total: paid + selectedEarnings };
-}
 
 function groupByFreelancer(candidates: Candidate[]): FreelancerGroup[] {
   const map = new Map<string, FreelancerGroup>();
@@ -277,7 +260,11 @@ export default function FreelancerCandidatesSection({ projectId, freelancerRates
 
       <div className="space-y-8">
         {groups.map((group) => {
-          const earnings = calcEarnings(group.candidates, freelancerRates, projectPoints);
+          const earnings = calcFreelancerEarnings({
+            rates: freelancerRates,
+            points: projectPoints,
+            candidates: group.candidates,
+          });
 
           return (
             <div key={group.user_id}>
@@ -327,27 +314,36 @@ export default function FreelancerCandidatesSection({ projectId, freelancerRates
                 </table>
               </div>
 
-              {/* Earnings summary */}
+              {/* Earnings summary — wspolna logika z widokiem freelancera i zamknieciem projektu */}
               <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-1 text-xs text-gray-600 pl-1">
-                <span>
-                  Etap 1:{' '}
-                  <span className="text-gray-500">{earnings.stage1Count} &times; {freelancerRates.cv_rate} zł</span>
-                  {' = '}
-                  <strong className="text-gray-800">{earnings.stage1Earnings} zł</strong>
-                </span>
-                <span>
-                  Etap 2:{' '}
-                  <span className="text-gray-500">{earnings.stage2Count} &times; {freelancerRates.meeting_rate} zł</span>
-                  {' = '}
-                  <strong className="text-gray-800">{earnings.stage2Earnings} zł</strong>
-                </span>
-                {earnings.selectedEarnings > 0 && (
-                  <span>
-                    Wybrany: <strong className="text-gray-800">{earnings.selectedEarnings} zł</strong>
-                  </span>
+                {earnings.mode === 'selected' ? (
+                  <>
+                    <span>
+                      Wybrany:{' '}
+                      <span className="text-gray-500">{earnings.selectedCount} &times; {earnings.effectiveValue} zł</span>
+                      {' = '}
+                      <strong className="text-gray-800">{earnings.amount} zł</strong>
+                    </span>
+                    <span className="text-gray-400">CV i spotkania wliczone w wartosc projektu</span>
+                  </>
+                ) : (
+                  <>
+                    <span>
+                      CV:{' '}
+                      <span className="text-gray-500">{earnings.stage1Count} &times; {freelancerRates.cv_rate} zł</span>
+                      {' = '}
+                      <strong className="text-gray-800">{earnings.stage1Count * freelancerRates.cv_rate} zł</strong>
+                    </span>
+                    <span>
+                      Spotkania:{' '}
+                      <span className="text-gray-500">{earnings.stage2Count} &times; {freelancerRates.meeting_rate} zł</span>
+                      {' = '}
+                      <strong className="text-gray-800">{earnings.stage2Count * freelancerRates.meeting_rate} zł</strong>
+                    </span>
+                  </>
                 )}
                 <span className="font-semibold text-[#FF5A3C]">
-                  Suma: {earnings.total} zł
+                  Suma: {earnings.amount} zł
                 </span>
               </div>
             </div>
