@@ -9,6 +9,7 @@ import type { PeriodNumbers, FreelancerRecommendation } from '@/lib/status-metri
 import type { PeriodKey, DateRange, Trend } from '@/lib/date-ranges';
 import { countAlerts, type ProjectAlert } from '@/lib/alerts-shared';
 import AlertList from '@/components/alerts/AlertList';
+import InfoTip from '@/components/ui/InfoTip';
 
 // ── Exported types (imported by page.tsx) ─────────────────────────────────────
 
@@ -108,23 +109,6 @@ const PERIOD_OPTIONS: { label: string; value: PeriodKey }[] = [
 function fmtDate(s: string): string {
   const d = new Date(s + 'T00:00:00Z');
   return `${String(d.getUTCDate()).padStart(2, '0')}.${String(d.getUTCMonth() + 1).padStart(2, '0')}.${d.getUTCFullYear()}`;
-}
-
-function InfoTip({ text }: { text: string }) {
-  return (
-    <span className="group relative inline-flex items-center ml-1.5 align-middle">
-      <span
-        className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-gray-200 text-gray-600 text-[10px] font-bold cursor-help hover:bg-gray-300"
-        aria-label={text}
-      >
-        i
-      </span>
-      <span className="pointer-events-none absolute left-1/2 -translate-x-1/2 bottom-full mb-2 w-64 px-3 py-2 bg-gray-900 text-white text-xs rounded-md shadow-lg opacity-0 group-hover:opacity-100 transition-opacity z-50 whitespace-normal text-left">
-        {text}
-        <span className="absolute top-full left-1/2 -translate-x-1/2 -mt-0.5 border-4 border-transparent border-t-gray-900" />
-      </span>
-    </span>
-  );
 }
 
 function TrendBadge({ trend }: { trend: Trend }) {
@@ -256,6 +240,7 @@ export default function StatusMeetingClient({
   const cardCls = 'bg-white border border-gray-200 rounded-lg p-6';
   const sectionTitleCls = 'text-base font-semibold text-gray-900 mb-4';
   const emptyTextCls = 'text-sm text-gray-400';
+  const recCellCls = 'px-3 py-2.5';
 
   const activeTabCls = 'px-3 py-1.5 rounded-md text-sm font-medium bg-[#FF5A3C]/10 text-[#FF5A3C]';
   const inactiveTabCls = 'px-3 py-1.5 rounded-md text-sm font-medium text-gray-600 hover:bg-gray-100 transition-colors';
@@ -393,46 +378,59 @@ export default function StatusMeetingClient({
 
       {/* ── Rekomendacje freelancerow ───────────────────────────────────── */}
       <div className={cardCls}>
-        <h2 className={sectionTitleCls}>
+        <h2 className="text-base font-semibold text-gray-900 mb-4">
           Rekomendacje freelancerow
-          <InfoTip text="Liczba kandydatow zgloszonych przez freelancera w okresie (data zgloszenia). Zaakceptowane = kandydaci, ktorzy przeszli Etap 1." />
+          <InfoTip
+            align="start"
+            text="Liczba kandydatow zgloszonych przez freelancera w okresie (data zgloszenia). Zaakceptowane = kandydaci, ktorzy przeszli Etap 1."
+          />
         </h2>
         {freelancerRecs.length === 0 ? (
           <p className={emptyTextCls}>Brak rekomendacji freelancerow w tym okresie</p>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-gray-200 text-left text-xs text-gray-500 uppercase tracking-wide">
-                  <th className="py-2 pr-4 font-medium">Freelancer</th>
-                  <th className="py-2 px-4 font-medium text-right">Zgloszone</th>
-                  <th className="py-2 px-4 font-medium text-right">Zaakceptowane (Etap 1)</th>
-                  <th className="py-2 pl-4 font-medium text-right">
-                    Spotkania z klientem (Etap 2)
-                    <InfoTip text={METRIC_INFO.freelancer_meetings} />
-                  </th>
+          <table className="w-full table-fixed text-sm">
+            <colgroup>
+              <col className="w-[40%]" />
+              <col className="w-[20%]" />
+              <col className="w-[20%]" />
+              <col className="w-[20%]" />
+            </colgroup>
+            <thead>
+              <tr className="text-xs text-gray-500 uppercase tracking-wide">
+                <th className={recCellCls + ' text-left font-medium'}>Freelancer</th>
+                <th className={recCellCls + ' text-center font-medium'}>
+                  Zgloszone
+                  <InfoTip text={'Zgloszone: ' + METRIC_INFO.freelancer_recs} />
+                </th>
+                <th className={recCellCls + ' text-center font-medium'}>
+                  Etap 1
+                  <InfoTip text={'Zaakceptowane (Etap 1 - CV przyjete): kandydaci zgloszeni przez freelancera w okresie, ktorzy przeszli Etap 1 lub dalej. Liczone wg daty zgloszenia kandydata.'} />
+                </th>
+                <th className={recCellCls + ' text-center font-medium'}>
+                  Etap 2
+                  <InfoTip align="end" text={'Spotkania z klientem (Etap 2): ' + METRIC_INFO.freelancer_meetings} />
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {freelancerRecs.map((r) => (
+                <tr key={r.user_id} className="border-t border-gray-100">
+                  <td className={recCellCls + ' text-left text-gray-900 truncate'} title={r.name}>{r.name}</td>
+                  <td className={recCellCls + ' text-center tabular-nums text-gray-900'}>{r.submitted}</td>
+                  <td className={recCellCls + ' text-center tabular-nums text-gray-900'}>{r.accepted}</td>
+                  <td className={recCellCls + ' text-center tabular-nums text-gray-900'}>{r.meetings}</td>
                 </tr>
-              </thead>
-              <tbody>
-                {freelancerRecs.map((r) => (
-                  <tr key={r.user_id} className="border-b border-gray-100">
-                    <td className="py-2 pr-4 text-gray-900">{r.name}</td>
-                    <td className="py-2 px-4 text-right tabular-nums text-gray-900">{r.submitted}</td>
-                    <td className="py-2 px-4 text-right tabular-nums text-gray-900">{r.accepted}</td>
-                    <td className="py-2 pl-4 text-right tabular-nums text-gray-900">{r.meetings}</td>
-                  </tr>
-                ))}
-              </tbody>
-              <tfoot>
-                <tr className="font-semibold text-gray-900">
-                  <td className="pt-3 pr-4">Razem</td>
-                  <td className="pt-3 px-4 text-right tabular-nums">{recTotals.submitted}</td>
-                  <td className="pt-3 px-4 text-right tabular-nums">{recTotals.accepted}</td>
-                  <td className="pt-3 pl-4 text-right tabular-nums">{recTotals.meetings}</td>
-                </tr>
-              </tfoot>
-            </table>
-          </div>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr className="border-t border-gray-200 bg-gray-50 font-semibold text-gray-900">
+                <td className={recCellCls + ' text-left'}>Razem</td>
+                <td className={recCellCls + ' text-center tabular-nums'}>{recTotals.submitted}</td>
+                <td className={recCellCls + ' text-center tabular-nums'}>{recTotals.accepted}</td>
+                <td className={recCellCls + ' text-center tabular-nums'}>{recTotals.meetings}</td>
+              </tr>
+            </tfoot>
+          </table>
         )}
       </div>
 
