@@ -149,3 +149,13 @@ export function formatRangePL(range: DateRange): string {
   if (range.start === range.end) return fmt(range.start);
   return `${fmt(range.start)} - ${fmt(range.end)}`;
 }
+
+// Krotki zapis zakresu bez roku, np. "16.11-22.11" (jeden dzien: "16.11").
+export function formatRangeShortPL(range: DateRange): string {
+  const fmt = (s: string) => {
+    const d = new Date(s + 'T00:00:00Z');
+    return `${String(d.getUTCDate()).padStart(2, '0')}.${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+  };
+  if (range.start === range.end) return fmt(range.start);
+  return `${fmt(range.start)}-${fmt(range.end)}`;
+}

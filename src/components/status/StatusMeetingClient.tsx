@@ -4,7 +4,8 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { FUNNEL_LEVELS } from '@/lib/funnel';
-import { formatRangePL } from '@/lib/date-ranges';
+import { formatRangePL, formatRangeShortPL } from '@/lib/date-ranges';
+import type { PeriodNumbers, FreelancerRecommendation } from '@/lib/status-metrics';
 import type { PeriodKey, DateRange, Trend } from '@/lib/date-ranges';
 import { countAlerts, type ProjectAlert } from '@/lib/alerts-shared';
 import AlertList from '@/components/alerts/AlertList';
@@ -62,12 +63,7 @@ export type UpcomingStage = {
   owner_name: string;
 };
 
-export type StatusNumbers = {
-  stages_closed: number;
-  success_count: number;
-  success_points: number;
-  new_projects: number;
-};
+export type StatusNumbers = PeriodNumbers;
 
 // ── Props ─────────────────────────────────────────────────────────────────────
 
@@ -80,6 +76,8 @@ type Props = {
     alerts: ProjectAlert[];
     upcomingStages: UpcomingStage[];
     numbers: StatusNumbers;
+    prevNumbers: StatusNumbers;
+    freelancerRecs: FreelancerRecommendation[];
   };
   availableUsers: { id: string; name: string }[];
   selectedPeriod: PeriodKey;
@@ -151,6 +149,60 @@ function TrendBadge({ trend }: { trend: Trend }) {
   );
 }
 
+// Definicje wspolne dla kafelkow "Liczby" i panelu "Analiza okresu".
+const METRIC_INFO = {
+  stages_closed: 'Liczba etapow projektowych zamknietych ptaszkiem w wybranym okresie.',
+  success_count: 'Projekty z statusem "Zrealizowany" zamkniete w wybranym okresie.',
+  new_projects: 'Projekty otwarte (data otwarcia) w wybranym okresie.',
+  success_points: 'Suma punktow rekruterow z projektow zamknietych z sukcesem w okresie.',
+  freelancer_recs: 'Liczba kandydatow zgloszonych przez freelancerow (data zgloszenia) w wybranym okresie.',
+} as const;
+
+const ANALYSIS_ITEMS: { key: keyof StatusNumbers; label: string }[] = [
+  { key: 'stages_closed', label: 'Etapy zrealizowane' },
+  { key: 'success_count', label: 'Projekty zamkniete' },
+  { key: 'new_projects', label: 'Nowe projekty' },
+  { key: 'success_points', label: 'Punkty zdobyte' },
+  { key: 'freelancer_recs', label: 'Rekomendacje freelancerow' },
+];
+
+// Baza < 5: roznica bezwzgledna ("2 -> 4"); baza >= 5: procent ze strzalka; oba 0: "-".
+function PeriodChange({ current, previous }: { current: number; previous: number }) {
+  if (current === 0 && previous === 0) {
+    return <span className="text-sm text-gray-400">-</span>;
+  }
+  if (previous < 5) {
+    const color = current > previous ? 'text-green-700' : current < previous ? 'text-red-700' : 'text-gray-500';
+    return <span className={`text-sm font-medium ${color}`}>{previous} -&gt; {current}</span>;
+  }
+  const change = ((current - previous) / previous) * 100;
+  const rounded = Math.round(change);
+  if (rounded === 0) {
+    return <span className="text-sm font-medium text-gray-500">= 0%</span>;
+  }
+  const up = rounded > 0;
+  return (
+    <span className={`text-sm font-medium ${up ? 'text-green-700' : 'text-red-700'}`}>
+      {up ? '↑' : '↓'} {up ? '+' : '-'}{Math.abs(rounded)}%
+    </span>
+  );
+}
+
+function AnalysisBar({ value, max, color, label }: { value: number; max: number; color: string; label: string }) {
+  const pct = max > 0 ? (value / max) * 100 : 0;
+  return (
+    <div className="flex items-center gap-2" title={`${label}: ${value}`}>
+      <div className="flex-1 h-3 bg-gray-50 rounded-sm overflow-hidden">
+        <div
+          className="h-full rounded-sm"
+          style={{ width: `${pct}%`, minWidth: value > 0 ? '2px' : 0, backgroundColor: color }}
+        />
+      </div>
+      <span className="w-10 text-right text-xs font-medium text-gray-700 tabular-nums">{value}</span>
+    </div>
+  );
+}
+
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export default function StatusMeetingClient({
@@ -169,7 +221,11 @@ export default function StatusMeetingClient({
   const [customOd, setCustomOd] = useState(customRange?.od ?? '');
   const [customDo, setCustomDo] = useState(customRange?.do ?? '');
 
-  const { closedStages, closedProjects, newProjects, funnelDeltas, alerts, upcomingStages, numbers } = initialData;
+  const { closedStages, closedProjects, newProjects, funnelDeltas, alerts, upcomingStages, numbers, prevNumbers, freelancerRecs } = initialData;
+  const recTotals = freelancerRecs.reduce(
+    (acc, r) => ({ submitted: acc.submitted + r.submitted, accepted: acc.accepted + r.accepted }),
+    { submitted: 0, accepted: 0 }
+  );
   const alertCounts = countAlerts(alerts);
 
   function navigate(updates: { okres?: string; rekruter?: string; od?: string; do?: string }) {
@@ -293,7 +349,7 @@ export default function StatusMeetingClient({
           <div className={cardCls}>
             <p className="text-xs text-gray-500 uppercase tracking-wide">
               Etapy zrealizowane
-              <InfoTip text="Liczba etapow projektowych zamknietych ptaszkiem w wybranym okresie." />
+              <InfoTip text={METRIC_INFO.stages_closed} />
             </p>
             <p className="text-3xl font-bold text-gray-900 mt-2">{numbers.stages_closed}</p>
             <TrendBadge trend={trends.stages_closed} />
@@ -301,7 +357,7 @@ export default function StatusMeetingClient({
           <div className={cardCls}>
             <p className="text-xs text-gray-500 uppercase tracking-wide">
               Projekty zamkniete
-              <InfoTip text='Projekty z statusem "Zrealizowany" zamkniete w wybranym okresie.' />
+              <InfoTip text={METRIC_INFO.success_count} />
             </p>
             <p className="text-3xl font-bold text-gray-900 mt-2">{numbers.success_count}</p>
             <TrendBadge trend={trends.success_count} />
@@ -309,7 +365,7 @@ export default function StatusMeetingClient({
           <div className={cardCls}>
             <p className="text-xs text-gray-500 uppercase tracking-wide">
               Nowe projekty
-              <InfoTip text="Projekty otwarte (data otwarcia) w wybranym okresie." />
+              <InfoTip text={METRIC_INFO.new_projects} />
             </p>
             <p className="text-3xl font-bold text-gray-900 mt-2">{numbers.new_projects}</p>
             <TrendBadge trend={trends.new_projects} />
@@ -317,7 +373,7 @@ export default function StatusMeetingClient({
           <div className={cardCls}>
             <p className="text-xs text-gray-500 uppercase tracking-wide">
               Punkty zdobyte
-              <InfoTip text="Suma punktow rekruterow z projektow zamknietych z sukcesem w okresie." />
+              <InfoTip text={METRIC_INFO.success_points} />
             </p>
             <p className="text-3xl font-bold text-[#FF5A3C] mt-2">{numbers.success_points}</p>
             <TrendBadge trend={trends.success_points} />
@@ -326,6 +382,87 @@ export default function StatusMeetingClient({
         <div className="mt-3 text-xs text-gray-500 flex items-center justify-end">
           <span>Trend porownywany z: {formatRangePL(comparisonRange)}</span>
           <InfoTip text="Trend pokazuje zmiane wzgledem analogicznego poprzedniego okresu. Dla 'Ten tydzien' to poprzedni tydzien (Pon-Nd). Dla 'Dzis' to wczoraj. Dla zakresu niestandardowego — zakres tej samej dlugosci bezposrednio przed. Roznice mniejsze niz 5% pokazywane jako 'bez zmiany'." />
+        </div>
+      </div>
+
+      {/* ── Rekomendacje freelancerow ───────────────────────────────────── */}
+      <div className={cardCls}>
+        <h2 className={sectionTitleCls}>
+          Rekomendacje freelancerow
+          <InfoTip text="Liczba kandydatow zgloszonych przez freelancera w okresie (data zgloszenia). Zaakceptowane = kandydaci, ktorzy przeszli Etap 1." />
+        </h2>
+        {freelancerRecs.length === 0 ? (
+          <p className={emptyTextCls}>Brak rekomendacji freelancerow w tym okresie</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-gray-200 text-left text-xs text-gray-500 uppercase tracking-wide">
+                  <th className="py-2 pr-4 font-medium">Freelancer</th>
+                  <th className="py-2 px-4 font-medium text-right">Zgloszone</th>
+                  <th className="py-2 pl-4 font-medium text-right">Zaakceptowane</th>
+                </tr>
+              </thead>
+              <tbody>
+                {freelancerRecs.map((r) => (
+                  <tr key={r.user_id} className="border-b border-gray-100">
+                    <td className="py-2 pr-4 text-gray-900">{r.name}</td>
+                    <td className="py-2 px-4 text-right tabular-nums text-gray-900">{r.submitted}</td>
+                    <td className="py-2 pl-4 text-right tabular-nums text-gray-900">{r.accepted}</td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr className="font-semibold text-gray-900">
+                  <td className="pt-3 pr-4">Razem</td>
+                  <td className="pt-3 px-4 text-right tabular-nums">{recTotals.submitted}</td>
+                  <td className="pt-3 pl-4 text-right tabular-nums">{recTotals.accepted}</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* ── Analiza okresu ───────────────────────────────────────────────── */}
+      <div className={cardCls}>
+        <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2 mb-4">
+          <h2 className="text-base font-semibold text-gray-900">Analiza okresu</h2>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-600">
+            <span className="inline-flex items-center gap-1.5">
+              <span className="w-3 h-3 rounded-sm bg-[#FF5A3C]" />
+              Biezacy okres ({formatRangeShortPL(range)})
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <span className="w-3 h-3 rounded-sm bg-[#D1D5DB]" />
+              Poprzedni okres ({formatRangeShortPL(comparisonRange)})
+            </span>
+          </div>
+        </div>
+        <div className="divide-y divide-gray-100">
+          {ANALYSIS_ITEMS.map((item) => {
+            const cur = numbers[item.key];
+            const prev = prevNumbers[item.key];
+            const max = Math.max(cur, prev);
+            return (
+              <div
+                key={item.key}
+                className="grid grid-cols-[1fr_auto] sm:grid-cols-[12rem_1fr_6rem] items-center gap-x-4 gap-y-2 py-3"
+              >
+                <div className="text-sm text-gray-700">
+                  {item.label}
+                  <InfoTip text={METRIC_INFO[item.key]} />
+                </div>
+                <div className="col-span-2 row-start-2 sm:col-span-1 sm:row-start-auto space-y-1">
+                  <AnalysisBar value={cur} max={max} color="#FF5A3C" label="Biezacy okres" />
+                  <AnalysisBar value={prev} max={max} color="#D1D5DB" label="Poprzedni okres" />
+                </div>
+                <div className="text-right col-start-2 row-start-1 sm:col-start-auto sm:row-start-auto">
+                  <PeriodChange current={cur} previous={prev} />
+                </div>
+              </div>
+            );
+          })}
         </div>
       </div>
 
